@@ -1,0 +1,5 @@
+{
+  "name": "Sky Automation Tech Loyalty",
+  "description": "Premium loyalty card management system with glassmorphic digital cards and real-time analytics.",
+  "requestFramePermissions": ["camera"]
+}
