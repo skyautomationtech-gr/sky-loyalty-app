@@ -1,7 +1,6 @@
 import React from 'react';
 import { Staff } from '../types';
-import { Shield, ArrowLeft, Sparkles, Lock, ShieldCheck, Zap } from 'lucide-react';
-import { motion } from 'motion/react';
+import ComingSoon from './ComingSoon';
 
 interface TwoFactorAuthProps {
   user: Staff | null;
@@ -9,71 +8,5 @@ interface TwoFactorAuthProps {
 }
 
 export default function TwoFactorAuth({ onBack }: TwoFactorAuthProps) {
-  return (
-    <div className="space-y-6 pb-20">
-      <header className="flex items-center gap-3 py-2">
-        <button onClick={onBack} className="p-2 -ml-2 text-gray-text hover:text-teal-primary transition-colors">
-          <ArrowLeft className="w-6 h-6" />
-        </button>
-        <h1 className="text-xl font-black text-dark-text">টু-ফ্যাক্টর অথেন্টিকেশন</h1>
-      </header>
-
-      <div className="bg-white border border-bg-light rounded-[2.5rem] p-8 text-center shadow-sm relative overflow-hidden">
-        {/* Background Decoration */}
-        <div className="absolute top-0 left-0 w-32 h-32 bg-teal-primary/5 rounded-full -ml-16 -mt-16 blur-2xl" />
-        <div className="absolute bottom-0 right-0 w-24 h-24 bg-teal-primary/5 rounded-full -mr-12 -mb-12 blur-xl" />
-
-        <motion.div 
-          animate={{ scale: [1, 1.1, 1] }}
-          transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-          className="w-24 h-24 mx-auto bg-teal-primary/10 rounded-full flex items-center justify-center mb-6 relative"
-        >
-          <div className="absolute inset-0 bg-teal-primary/20 rounded-full animate-pulse" />
-          <Shield className="w-12 h-12 text-teal-primary relative z-10" />
-        </motion.div>
-        
-        <div className="inline-flex items-center px-4 py-1.5 bg-teal-primary/10 text-teal-primary rounded-full text-[10px] font-black uppercase tracking-widest mb-4 border border-teal-primary/20">
-          শীঘ্রই আসছে 🚀
-        </div>
-
-        <h2 className="text-2xl font-black text-dark-text mb-6">টু-ফ্যাক্টর অথেন্টিকেশন</h2>
-        
-        <div className="bg-bg-light rounded-3xl p-6 border border-transparent mb-8">
-          <p className="text-sm font-bold text-dark-text leading-relaxed">
-            আপনার অ্যাকাউন্টের বাড়তি নিরাপত্তার জন্য<br />
-            2FA সিস্টেম তৈরি হচ্ছে। 🔐<br />
-            <span className="text-teal-primary">খুব শীঘ্রই এটি চালু হবে।</span>
-          </p>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="h-1.5 w-full bg-bg-light rounded-full overflow-hidden mb-2">
-          <motion.div 
-            initial={{ x: '-100%' }}
-            animate={{ x: '100%' }}
-            transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-            className="h-full w-1/3 bg-teal-primary rounded-full"
-          />
-        </div>
-        <p className="text-[8px] font-black text-gray-text uppercase tracking-widest">Enhancing account security by Sky Tech...</p>
-
-        <div className="mt-10 grid grid-cols-2 gap-4">
-          <div className="p-4 bg-bg-light rounded-2xl flex flex-col items-center gap-2">
-            <Lock className="w-5 h-5 text-teal-primary" />
-            <span className="text-[8px] font-black text-gray-text uppercase">অতিরিক্ত সুরক্ষা</span>
-          </div>
-          <div className="p-4 bg-bg-light rounded-2xl flex flex-col items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-teal-primary" />
-            <span className="text-[8px] font-black text-gray-text uppercase">ভেরিফাইড লগইন</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="text-center pt-8">
-        <p className="text-[10px] font-black text-gray-text uppercase tracking-[0.2em] flex items-center justify-center gap-2">
-          <Sparkles className="w-3 h-3 text-teal-primary" /> Sky Automation Tech
-        </p>
-      </div>
-    </div>
-  );
+  return <ComingSoon onBack={onBack} featureName="টু-ফ্যাক্টর অথেন্টিকেশন" />;
 }

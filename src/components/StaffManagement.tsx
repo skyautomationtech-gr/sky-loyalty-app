@@ -18,7 +18,8 @@ import {
   UserX,
   ShieldCheck,
   RefreshCw,
-  X
+  X,
+  Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ConfirmationModal from './ConfirmationModal';
@@ -38,6 +39,7 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
+  const [search, setSearch] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [showToast, setShowToast] = useState(false);
@@ -189,8 +191,12 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
     status: 'active'
   };
 
-  const filteredStaff = staff.filter(s => s.email !== MASTER_ADMIN_EMAIL);
-  const displayStaff = [masterAdmin, ...filteredStaff];
+  const filteredStaff = staff.filter(s => 
+    s.email !== MASTER_ADMIN_EMAIL && 
+    (s.name.toLowerCase().includes(search.toLowerCase()) || 
+     s.email.toLowerCase().includes(search.toLowerCase()))
+  );
+  const displayStaff = search ? filteredStaff : [masterAdmin, ...filteredStaff];
 
   const isPrivileged = currentUser?.role === 'Admin' || 
                       currentUser?.role === 'Master Admin' || 
@@ -220,6 +226,18 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
           <p className="text-[10px] font-black text-gray-text uppercase tracking-widest">মোট স্টাফ: {displayStaff.length} জন</p>
         </div>
       </header>
+
+      {/* Search Bar */}
+      <div className="relative group">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-text group-focus-within:text-teal-primary transition-colors" />
+        <input
+          type="text"
+          placeholder="নাম বা ইমেইল দিয়ে খুঁজুন..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full bg-white rounded-2xl py-4 pl-12 pr-4 text-dark-text font-bold text-sm focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border border-bg-light focus:border-teal-primary/10 shadow-sm"
+        />
+      </div>
 
       {/* Quick Actions */}
       {isPrivileged ? (
@@ -276,10 +294,10 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
                 }`}>
                   {s.name.charAt(0)}
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-black text-dark-text tracking-tight">{s.name}</h3>
-                    <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border ${
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-black text-dark-text tracking-tight truncate">{s.name}</h3>
+                    <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border shrink-0 ${
                       s.role === 'Master Admin' ? 'bg-yellow-50 border-yellow-400 text-yellow-600' :
                       s.role === 'Admin' ? 'bg-purple-50 border-purple-400 text-purple-600' :
                       'bg-teal-50 border-teal-primary text-teal-primary'
@@ -287,14 +305,14 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
                       {s.role.toUpperCase()}
                     </span>
                   </div>
-                  <p className="text-[10px] text-gray-text font-black flex items-center gap-1.5 mt-1 uppercase tracking-widest">
-                    <Mail className="w-3 h-3" /> {s.email}
+                  <p className="text-[10px] text-gray-text font-black flex items-center gap-1.5 mt-1 uppercase tracking-widest truncate">
+                    <Mail className="w-3 h-3 shrink-0" /> {s.email}
                   </p>
                 </div>
               </div>
               
               {s.email !== MASTER_ADMIN_EMAIL && (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 shrink-0 ml-2">
                   <motion.button 
                     whileTap={{ scale: 0.9 }}
                     onClick={() => openEdit(s)}
@@ -313,13 +331,13 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
               )}
             </div>
 
-            <div className="flex items-center justify-between pt-5 border-t border-bg-light">
-              <div className="flex items-center gap-6">
-                <div className="flex flex-col">
+            <div className="flex items-center justify-between pt-5 border-t border-bg-light gap-4">
+              <div className="flex items-center gap-6 min-w-0">
+                <div className="flex flex-col min-w-0">
                   <span className="text-[8px] font-black text-gray-text uppercase tracking-widest mb-0.5">Added By</span>
-                  <span className="text-[10px] font-black text-dark-text">{s.addedBy}</span>
+                  <span className="text-[10px] font-black text-dark-text truncate">{s.addedBy}</span>
                 </div>
-                <div className="flex flex-col">
+                <div className="flex flex-col shrink-0">
                   <span className="text-[8px] font-black text-gray-text uppercase tracking-widest mb-0.5">Date</span>
                   <span className="text-[10px] font-black text-dark-text">{new Date(s.addedDate).toLocaleDateString('bn-BD')}</span>
                 </div>

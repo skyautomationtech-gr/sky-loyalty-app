@@ -56,6 +56,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import Toast from './Toast';
+import ComingSoon from './ComingSoon';
 
 interface SettingsProps {
   user: Staff | null;
@@ -67,6 +68,7 @@ interface SettingsProps {
 export default function Settings({ onBack }: SettingsProps) {
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
+  const [soonFeature, setSoonFeature] = useState<string | null>(null);
 
   const sections = [
     {
@@ -177,10 +179,13 @@ export default function Settings({ onBack }: SettingsProps) {
     }
   ];
 
-  const handleSoon = () => {
-    setToastMsg('শীঘ্রই আসছে! 🚀');
-    setShowToast(true);
+  const handleSoon = (label: string) => {
+    setSoonFeature(label);
   };
+
+  if (soonFeature) {
+    return <ComingSoon onBack={() => setSoonFeature(null)} featureName={soonFeature} />;
+  }
 
   return (
     <div className="flex flex-col h-full bg-bg-light">
@@ -207,7 +212,7 @@ export default function Settings({ onBack }: SettingsProps) {
                 <motion.button
                   key={i}
                   whileTap={{ scale: 0.98 }}
-                  onClick={item.isVersion ? undefined : handleSoon}
+                  onClick={item.isVersion ? undefined : () => handleSoon(item.label)}
                   className={`w-full flex items-center justify-between p-4 rounded-[2rem] transition-all hover:bg-bg-light group ${i !== section.items.length - 1 ? 'mb-1' : ''}`}
                 >
                   <div className="flex items-center gap-4">

@@ -210,7 +210,7 @@ export default function EditProfile({ user, onBack, onUpdate }: EditProfileProps
               <p className="text-sm font-bold text-gray-text leading-relaxed px-4">আপনার নতুন ইমেইল <span className="text-teal-primary">{email}</span>-এ পাঠানো ৬-ডিজিটের কোডটি দিন</p>
             </div>
 
-            <div className="flex justify-center gap-3">
+            <div className="flex justify-center gap-2 w-full px-5 box-border">
               {otp.map((digit, idx) => (
                 <input
                   key={idx}
@@ -220,7 +220,11 @@ export default function EditProfile({ user, onBack, onUpdate }: EditProfileProps
                   maxLength={1}
                   value={digit}
                   onChange={(e) => handleOtpChange(idx, e.target.value)}
-                  className="w-12 h-16 bg-bg-light border-2 border-transparent rounded-[1.25rem] text-center text-2xl font-black text-dark-text focus:border-teal-primary focus:bg-white focus:shadow-xl focus:shadow-teal-primary/10 focus:outline-none transition-all"
+                  className={`w-[45px] h-[55px] rounded-xl text-center text-2xl font-black transition-all border-2 flex-shrink-0 ${
+                    digit 
+                      ? 'bg-teal-primary/5 border-teal-primary text-teal-primary shadow-lg shadow-teal-primary/5' 
+                      : 'bg-bg-light border-transparent text-dark-text focus:border-teal-primary focus:bg-white'
+                  }`}
                 />
               ))}
             </div>

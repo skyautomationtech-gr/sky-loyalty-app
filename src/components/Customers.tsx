@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Customer, Staff, Transaction } from '../types';
 import { db } from '../firebase';
 import { collection, addDoc, updateDoc, doc, deleteDoc, query, where, onSnapshot, orderBy } from 'firebase/firestore';
-import { Search, Plus, Phone, MapPin, Zap, ShoppingBag, History, Edit2, Trash2, X, Download, Users, ChevronRight, MessageSquare, RefreshCw, ArrowUpRight, Sparkles } from 'lucide-react';
+import { Search, Plus, Phone, MapPin, Zap, ShoppingBag, History, Edit2, Trash2, X, Download, Users, ChevronRight, MessageSquare, RefreshCw, ArrowUpRight, Sparkles, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import CustomerCard from './CustomerCard';
 import html2canvas from 'html2canvas';
@@ -18,14 +18,17 @@ export default function Customers({ user, customers }: CustomersProps) {
   const [search, setSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
-  const filteredCustomers = customers.filter(m => 
-    m.name.toLowerCase().includes(search.toLowerCase()) ||
-    m.phone.includes(search) ||
-    m.customerId.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredCustomers = useMemo(() => {
+    const s = search.toLowerCase();
+    return customers.filter(m => 
+      m.name.toLowerCase().includes(s) ||
+      m.phone.includes(s) ||
+      m.customerId.toLowerCase().includes(s)
+    );
+  }, [customers, search]);
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-6 pb-24 bg-[#F8FFFE]">
       {/* Header */}
       <header className="flex justify-between items-center bg-white py-2">
         <div className="flex items-center gap-3">
@@ -53,12 +56,11 @@ export default function Customers({ user, customers }: CustomersProps) {
         {filteredCustomers.map((customer, idx) => (
           <motion.div
             key={customer.id}
-            layout
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.05 }}
+            transition={{ delay: Math.min(idx * 0.02, 0.3) }}
             onClick={() => setSelectedCustomer(customer)}
-            className="bg-white border border-bg-light rounded-[2rem] p-4 flex justify-between items-center shadow-sm hover:shadow-md active:scale-[0.98] transition-all cursor-pointer group hover:border-teal-primary/20"
+            className="bg-white border border-bg-light rounded-[2rem] p-4 flex justify-between items-center shadow-sm active:scale-[0.98] transition-all cursor-pointer group hover:border-teal-primary/20"
           >
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-teal-primary/10 flex items-center justify-center font-black text-teal-primary text-lg border-2 border-white shadow-sm group-hover:scale-110 transition-transform">
@@ -117,6 +119,12 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
   const [addMode, setAddMode] = useState<'DIRECT' | 'AMOUNT'>('AMOUNT');
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editData, setEditData] = useState({
+    name: customer.name,
+    phone: customer.phone,
+    address: customer.address || ''
+  });
   const [loading, setLoading] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
@@ -157,9 +165,12 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
     else newTier = 'BRONZE';
 
     const sendWhatsApp = (customer: Customer, amount: number, type: 'ADD' | 'REDEEM') => {
-      const phone = customer.phone
-        .replace(/\D/g, '')  // remove non-digits
-        .replace(/^0/, '88'); // convert 01X to 8801X
+      let phone = customer.phone.replace(/\D/g, '');
+      if (phone.startsWith('0')) {
+        phone = '88' + phone;
+      } else if (!phone.startsWith('88')) {
+        phone = '88' + phone;
+      }
       
       let message = '';
       if (type === 'ADD') {
@@ -183,7 +194,14 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
       }
 
       const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
-      window.open(url, '_blank');
+      const win = window.open(url, '_blank');
+      if (!win) {
+        // If popup is blocked, try a direct link click
+        const link = document.createElement('a');
+        link.href = url;
+        link.target = '_blank';
+        link.click();
+      }
     };
 
     try {
@@ -228,6 +246,37 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
     }
   };
 
+  const handleUpdateCustomer = async () => {
+    if (user?.role !== 'Admin' && user?.role !== 'Master Admin') return;
+    if (!editData.name.trim() || !editData.phone.trim()) {
+      setToastMsg('নাম এবং ফোন নম্বর প্রয়োজন');
+      setToastType('error');
+      setShowToast(true);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await updateDoc(doc(db, 'customers', customer.id), {
+        name: editData.name,
+        phone: editData.phone,
+        address: editData.address
+      });
+      
+      setToastMsg('কাস্টমার তথ্য আপডেট হয়েছে ✅');
+      setToastType('success');
+      setShowToast(true);
+      setIsEditMode(false);
+    } catch (err) {
+      console.error('Error updating customer:', err);
+      setToastMsg('আপডেট করতে সমস্যা হয়েছে');
+      setToastType('error');
+      setShowToast(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (user?.role !== 'Admin' && user?.role !== 'Master Admin') return;
     try {
@@ -251,6 +300,23 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
           scale: 3,
           useCORS: true,
           backgroundColor: null,
+          onclone: (clonedDoc) => {
+            // Force standard color parsing by removing modern CSS features from the clone
+            const style = clonedDoc.createElement('style');
+            style.innerHTML = `
+              * {
+                color-scheme: light !important;
+              }
+              :root {
+                --color-teal-primary: #00BFA6 !important;
+                --color-bg-light: #F8FFFE !important;
+                --color-dark-text: #1A2E35 !important;
+                --color-gray-text: #8A9BA8 !important;
+                --color-danger-red: #FF5252 !important;
+              }
+            `;
+            clonedDoc.head.appendChild(style);
+          }
         });
         const link = document.createElement('a');
         link.download = `${customer.customerId}_Card.png`;
@@ -282,7 +348,7 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar">
+        <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar bg-[#F8FFFE]">
           {/* Luxury Card Section */}
           <div className="space-y-4">
             <CustomerCard customer={customer} id="luxury-card-download" />
@@ -479,21 +545,88 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
           <section className="bg-white border border-bg-light rounded-[2.5rem] p-8 space-y-6 shadow-sm">
             <h3 className="text-[10px] font-black text-gray-text uppercase tracking-widest">যোগাযোগের তথ্য</h3>
             <div className="space-y-5">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-bg-light flex items-center justify-center text-teal-primary border border-bg-light"><Phone className="w-5 h-5" /></div>
-                <div><p className="text-[9px] text-gray-text font-black uppercase tracking-widest">ফোন নম্বর</p><p className="text-sm text-dark-text font-bold">{customer.phone}</p></div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-bg-light flex items-center justify-center text-teal-primary border border-bg-light"><MapPin className="w-5 h-5" /></div>
-                <div><p className="text-[9px] text-gray-text font-black uppercase tracking-widest">ঠিকানা</p><p className="text-sm text-dark-text font-bold">{customer.address || 'দেওয়া হয়নি'}</p></div>
-              </div>
-              <motion.button 
-                whileTap={{ scale: 0.98 }}
-                onClick={() => window.open(`https://wa.me/${customer.phone.replace(/\D/g, '').replace(/^0/, '88')}`, '_blank')}
-                className="w-full h-14 bg-[#25D366] text-white rounded-2xl font-black text-xs flex items-center justify-center gap-3 shadow-xl shadow-[#25D366]/20 active:scale-95 transition-all"
-              >
-                <MessageSquare className="w-5 h-5" /> হোয়াটসঅ্যাপে মেসেজ দিন
-              </motion.button>
+              {isEditMode ? (
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-black text-gray-text uppercase tracking-widest ml-1">নাম</label>
+                    <input 
+                      type="text"
+                      value={editData.name}
+                      onChange={(e) => setEditData({ ...editData, name: e.target.value })}
+                      className="w-full bg-bg-light rounded-2xl p-4 text-dark-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-black text-gray-text uppercase tracking-widest ml-1">ফোন নম্বর</label>
+                    <input 
+                      type="text"
+                      value={editData.phone}
+                      onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
+                      className="w-full bg-bg-light rounded-2xl p-4 text-dark-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-black text-gray-text uppercase tracking-widest ml-1">ঠিকানা</label>
+                    <textarea 
+                      value={editData.address}
+                      onChange={(e) => setEditData({ ...editData, address: e.target.value })}
+                      rows={2}
+                      className="w-full bg-bg-light rounded-2xl p-4 text-dark-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10 resize-none"
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <motion.button 
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleUpdateCustomer}
+                      disabled={loading}
+                      className="flex-1 h-12 teal-gradient text-white rounded-xl font-black text-xs flex items-center justify-center gap-2"
+                    >
+                      {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
+                      সেভ করুন
+                    </motion.button>
+                    <motion.button 
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        setIsEditMode(false);
+                        setEditData({ name: customer.name, phone: customer.phone, address: customer.address || '' });
+                      }}
+                      className="flex-1 h-12 bg-bg-light text-gray-text rounded-xl font-black text-xs"
+                    >
+                      বাতিল
+                    </motion.button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-bg-light flex items-center justify-center text-teal-primary border border-bg-light"><Phone className="w-5 h-5" /></div>
+                    <div><p className="text-[9px] text-gray-text font-black uppercase tracking-widest">ফোন নম্বর</p><p className="text-sm text-dark-text font-bold">{customer.phone}</p></div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-bg-light flex items-center justify-center text-teal-primary border border-bg-light"><MapPin className="w-5 h-5" /></div>
+                    <div><p className="text-[9px] text-gray-text font-black uppercase tracking-widest">ঠিকানা</p><p className="text-sm text-dark-text font-bold">{customer.address || 'দেওয়া হয়নি'}</p></div>
+                  </div>
+                  <motion.button 
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      let phone = customer.phone.replace(/\D/g, '');
+                      if (phone.startsWith('0')) phone = '88' + phone;
+                      else if (!phone.startsWith('88')) phone = '88' + phone;
+                      const url = `https://wa.me/${phone}`;
+                      const win = window.open(url, '_blank');
+                      if (!win) {
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.target = '_blank';
+                        link.click();
+                      }
+                    }}
+                    className="w-full h-14 bg-[#25D366] text-white rounded-2xl font-black text-xs flex items-center justify-center gap-3 shadow-xl shadow-[#25D366]/20 active:scale-95 transition-all"
+                  >
+                    <MessageSquare className="w-5 h-5" /> হোয়াটসঅ্যাপে মেসেজ দিন
+                  </motion.button>
+                </>
+              )}
             </div>
           </section>
 
@@ -502,9 +635,10 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
             <div className="flex gap-4 pb-12">
               <motion.button 
                 whileTap={{ scale: 0.98 }}
-                className="flex-1 h-14 bg-bg-light border border-bg-light rounded-2xl text-dark-text text-xs font-black flex items-center justify-center gap-2 active:scale-95 transition-all"
+                onClick={() => setIsEditMode(!isEditMode)}
+                className={`flex-1 h-14 rounded-2xl text-xs font-black flex items-center justify-center gap-2 active:scale-95 transition-all ${isEditMode ? 'bg-teal-primary text-white shadow-lg shadow-teal-primary/20' : 'bg-bg-light border border-bg-light text-dark-text'}`}
               >
-                <Edit2 className="w-4 h-4" /> এডিট করুন
+                <Edit2 className="w-4 h-4" /> {isEditMode ? 'এডিট বন্ধ করুন' : 'এডিট করুন'}
               </motion.button>
               <motion.button 
                 whileTap={{ scale: 0.98 }}

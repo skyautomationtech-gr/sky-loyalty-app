@@ -341,7 +341,7 @@ export default function Login({ onLogin }: LoginProps) {
                 </div>
               </div>
 
-              <div className="flex justify-between gap-2 mb-10">
+              <div className="flex justify-center gap-2 mb-10 w-full px-5 box-border">
                 {otp.map((digit, idx) => (
                   <input
                     key={idx}
@@ -352,7 +352,7 @@ export default function Login({ onLogin }: LoginProps) {
                     value={digit}
                     onChange={(e) => handleOtpChange(idx, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                    className={`w-12 h-16 rounded-2xl text-center text-2xl font-black transition-all border-2 ${
+                    className={`w-[45px] h-[55px] rounded-xl text-center text-2xl font-black transition-all border-2 flex-shrink-0 ${
                       digit 
                         ? 'bg-teal-primary/5 border-teal-primary text-teal-primary shadow-lg shadow-teal-primary/5' 
                         : 'bg-bg-light border-transparent text-dark-text focus:border-teal-primary focus:bg-white'

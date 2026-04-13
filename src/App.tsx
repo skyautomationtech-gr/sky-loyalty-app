@@ -21,6 +21,7 @@ import ActiveSessions from './components/ActiveSessions';
 import TwoFactorAuth from './components/TwoFactorAuth';
 import ContactSupport from './components/ContactSupport';
 import PinLock from './components/PinLock';
+import ErrorBoundary from './components/ErrorBoundary';
 import { 
   Home, 
   Users, 
@@ -29,7 +30,8 @@ import {
   PlusCircle,
   Camera,
   User,
-  Plus
+  Plus,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { APP_LOGO, APP_NAME } from './constants';
@@ -51,11 +53,12 @@ export default function App() {
   const [redeemCount, setRedeemCount] = useState(0);
   
   const [subView, setSubView] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // Splash screen timer
     const splashTimer = setTimeout(() => setShowSplash(false), 2500);
-    // Initial data load simulation
+    // Initial data load simulation - Minimum 1000ms to prevent flash
     const loadTimer = setTimeout(() => setLoading(false), 1000);
     return () => {
       clearTimeout(splashTimer);
@@ -88,15 +91,6 @@ export default function App() {
     };
     trackSession();
 
-    const unsubCustomers = onSnapshot(collection(db, 'customers'), (snap) => {
-      setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Customer)));
-    });
-
-    const unsubNotifs = onSnapshot(collection(db, 'notifications'), (snap) => {
-      setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification))
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-    });
-
     const unsubStaff = onSnapshot(collection(db, 'staff'), (snap) => {
       const staff = snap.docs.map(d => ({ id: d.id, ...d.data() } as Staff));
       setStaffList(staff);
@@ -109,6 +103,23 @@ export default function App() {
       }
     });
 
+    return () => {
+      unsubStaff();
+    };
+  }, [staffInfo?.id]); // Only resubscribe if staff ID changes
+
+  useEffect(() => {
+    if (!staffInfo) return;
+
+    const unsubCustomers = onSnapshot(collection(db, 'customers'), (snap) => {
+      setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Customer)));
+    });
+
+    const unsubNotifs = onSnapshot(collection(db, 'notifications'), (snap) => {
+      setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification))
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+    });
+
     const unsubTransactions = onSnapshot(collection(db, 'transactions'), (snap) => {
       const redeems = snap.docs.filter(d => d.data().type === 'REDEEM').length;
       setRedeemCount(redeems);
@@ -117,10 +128,9 @@ export default function App() {
     return () => {
       unsubCustomers();
       unsubNotifs();
-      unsubStaff();
       unsubTransactions();
     };
-  }, [staffInfo]);
+  }, [staffInfo !== null]); // Only subscribe once when logged in
 
   const handleLogin = (staff: Staff) => {
     setStaffInfo(staff);
@@ -194,9 +204,27 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-bg-light">
+      <div className="h-screen flex flex-col items-center justify-center bg-[#F8FFFE]">
         <div className="w-12 h-12 border-4 border-teal-primary border-t-transparent rounded-full animate-spin mb-4" />
         <p className="text-xs font-bold text-gray-text uppercase tracking-widest">লোড হচ্ছে...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-[#F8FFFE] p-8 text-center">
+        <div className="w-20 h-20 rounded-[2rem] bg-danger-red/10 flex items-center justify-center mb-6">
+          <RefreshCw className="w-10 h-10 text-danger-red" />
+        </div>
+        <h2 className="text-xl font-black text-dark-text mb-2">সার্ভার সংযোগে সমস্যা</h2>
+        <p className="text-gray-text text-sm mb-8">{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="w-full h-14 teal-gradient text-white font-black rounded-2xl"
+        >
+          আবার চেষ্টা করুন
+        </button>
       </div>
     );
   }
@@ -225,9 +253,10 @@ export default function App() {
   ];
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-white">
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pt-[50px] pb-[80px] px-6">
+    <ErrorBoundary>
+      <div className="flex flex-col h-screen overflow-hidden bg-[#F8FFFE]">
+        {/* Main Content */}
+        <main className="flex-1 overflow-y-auto pt-[50px] pb-[80px] px-6">
         <AnimatePresence mode="wait">
           <motion.div
             key={subView || activeTab}
@@ -277,7 +306,13 @@ export default function App() {
                 <ContactSupport onBack={() => setSubView(null)} />
               ) : (
                 <ComingSoon 
-                  featureName={subView.charAt(0).toUpperCase() + subView.slice(1)} 
+                  featureName={
+                    subView === 'reports' ? 'রিপোর্ট ও অ্যানালিটিক্স' :
+                    subView === 'theme' ? 'থিম (Theme)' :
+                    subView === 'language' ? 'ভাষা (Language)' :
+                    subView === 'rate' ? 'রেট অ্যাপ' :
+                    subView.charAt(0).toUpperCase() + subView.slice(1)
+                  } 
                   onBack={() => setSubView(null)} 
                 />
               )
@@ -359,5 +394,6 @@ export default function App() {
         })}
       </nav>
     </div>
+    </ErrorBoundary>
   );
 }

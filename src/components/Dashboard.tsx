@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Customer, Staff, Notification } from '../types';
 import { Users, Zap, ShieldCheck, ShoppingBag, Plus, TrendingUp, ArrowUpRight, Bell, Sparkles, Calendar } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -13,7 +14,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ user, customers, staff, notifications, redeemCount, onAddCustomer }: DashboardProps) {
-  const totalPoints = customers.reduce((acc, m) => acc + m.points, 0);
+  const totalPoints = useMemo(() => customers.reduce((acc, m) => acc + m.points, 0), [customers]);
   
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
@@ -27,19 +28,25 @@ export default function Dashboard({ user, customers, staff, notifications, redee
     return "শুভ রাত্রি";
   };
 
-  const stats = [
-    { label: 'মোট কাস্টমার', value: customers.length, icon: Users, color: 'text-teal-primary', bg: 'bg-teal-primary/5' },
-    { label: 'মোট পয়েন্ট', value: totalPoints.toLocaleString(), icon: Zap, color: 'text-orange-500', bg: 'bg-orange-50' },
-    { label: 'স্টাফ মেম্বার', value: staff.length, icon: ShieldCheck, color: 'text-blue-500', bg: 'bg-blue-50' },
-    { label: 'রিডিম সংখ্যা', value: redeemCount.toLocaleString(), icon: ShoppingBag, color: 'text-purple-500', bg: 'bg-purple-50' },
-  ];
+  const stats = useMemo(() => {
+    const s = [
+      { label: 'মোট কাস্টমার', value: customers.length, icon: Users, color: 'text-teal-primary', bg: 'bg-teal-primary/5' },
+      { label: 'মোট পয়েন্ট', value: totalPoints.toLocaleString(), icon: Zap, color: 'text-orange-500', bg: 'bg-orange-50' },
+      { label: 'রিডিম সংখ্যা', value: redeemCount.toLocaleString(), icon: ShoppingBag, color: 'text-purple-500', bg: 'bg-purple-50' },
+    ];
 
-  const tiers = [
+    if (user?.role === 'Admin' || user?.role === 'Master Admin') {
+      s.splice(2, 0, { label: 'স্টাফ মেম্বার', value: staff.length, icon: ShieldCheck, color: 'text-blue-500', bg: 'bg-blue-50' });
+    }
+    return s;
+  }, [customers.length, totalPoints, redeemCount, staff.length, user?.role]);
+
+  const tiers = useMemo(() => [
     { name: 'Bronze', count: customers.filter(m => m.tier === 'BRONZE').length, color: 'bg-orange-600', max: customers.length || 1 },
     { name: 'Silver', count: customers.filter(m => m.tier === 'SILVER').length, color: 'bg-slate-400', max: customers.length || 1 },
     { name: 'Gold', count: customers.filter(m => m.tier === 'GOLD').length, color: 'bg-yellow-500', max: customers.length || 1 },
     { name: 'Platinum', count: customers.filter(m => m.tier === 'PLATINUM').length, color: 'bg-teal-400', max: customers.length || 1 },
-  ];
+  ], [customers]);
 
   return (
     <div className="space-y-6 pb-24">

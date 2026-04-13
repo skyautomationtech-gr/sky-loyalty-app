@@ -1,5 +1,5 @@
 import React from 'react';
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeCanvas } from 'qrcode.react';
 import { Customer } from '../types';
 
 interface CustomerCardProps {
@@ -11,7 +11,7 @@ export default function CustomerCard({ customer, id }: CustomerCardProps) {
   return (
     <div 
       id={id}
-      className="relative w-full aspect-[1.586/1] bg-[#0D0D0D] rounded-[1.5rem] overflow-hidden shadow-[0_10px_30px_rgba(201,168,76,0.2)] border border-[#C9A84C]/20 group"
+      className="relative w-full aspect-[1.586/1] bg-[#0D0D0D] rounded-[1.5rem] overflow-hidden shadow-[0_10px_30px_rgba(201,168,76,0.2)] border border-[rgba(201,168,76,0.2)] group"
     >
       {/* Polygon Texture Overlay */}
       <div className="absolute inset-0 opacity-20 pointer-events-none">
@@ -19,7 +19,7 @@ export default function CustomerCard({ customer, id }: CustomerCardProps) {
           <path d="M0 0 L100 0 L100 100 L0 100 Z" fill="url(#poly-grid)" />
           <defs>
             <pattern id="poly-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-              <path d="M0 20 L10 0 L20 20 Z" fill="none" stroke="#333" strokeWidth="0.5" />
+              <path d="M0 20 L10 0 L20 20 Z" fill="none" stroke="#333333" strokeWidth="0.5" />
             </pattern>
           </defs>
         </svg>
@@ -51,7 +51,7 @@ export default function CustomerCard({ customer, id }: CustomerCardProps) {
               <circle cx="1" cy="1" r="0.5" fill="rgba(0,0,0,0.1)" />
             </pattern>
             <mask id="wave-mask">
-              <path d="M200 0 C100 150 50 300 200 400 L200 400 L200 0 Z" fill="white" />
+              <path d="M200 0 C100 150 50 300 200 400 L200 400 L200 0 Z" fill="#FFFFFF" />
             </mask>
           </defs>
           <rect width="100%" height="100%" fill="url(#gold-dots)" mask="url(#wave-mask)" />
@@ -62,7 +62,7 @@ export default function CustomerCard({ customer, id }: CustomerCardProps) {
       <div className="relative h-full p-6 flex flex-col justify-between z-10">
         {/* Top Left */}
         <div>
-          <p className="text-[10px] text-white/60 font-light tracking-[2px] uppercase">
+          <p className="text-[10px] text-[rgba(255,255,255,0.6)] font-light tracking-[2px] uppercase">
             Sky Automation Tech
           </p>
         </div>
@@ -88,24 +88,24 @@ export default function CustomerCard({ customer, id }: CustomerCardProps) {
         <div className="flex items-end justify-between">
           <div className="flex gap-6">
             <div className="space-y-0.5">
-              <p className="text-[8px] text-white/40 font-bold uppercase tracking-widest">Phone</p>
+              <p className="text-[8px] text-[rgba(255,255,255,0.4)] font-bold uppercase tracking-widest">Phone</p>
               <p className="text-[10px] text-white font-medium">{customer.phone}</p>
             </div>
             <div className="space-y-0.5">
-              <p className="text-[8px] text-white/40 font-bold uppercase tracking-widest">Tier</p>
-              <span className="px-2 py-0.5 rounded-full bg-[#C9A84C]/20 border border-[#C9A84C]/30 text-[8px] text-[#C9A84C] font-black uppercase tracking-wider">
+              <p className="text-[8px] text-[rgba(255,255,255,0.4)] font-bold uppercase tracking-widest">Tier</p>
+              <span className="px-2 py-0.5 rounded-full bg-[rgba(201,168,76,0.2)] border border-[rgba(201,168,76,0.3)] text-[8px] text-[#C9A84C] font-black uppercase tracking-wider">
                 {customer.tier}
               </span>
             </div>
             <div className="space-y-0.5">
-              <p className="text-[8px] text-white/40 font-bold uppercase tracking-widest">Points</p>
+              <p className="text-[8px] text-[rgba(255,255,255,0.4)] font-bold uppercase tracking-widest">Points</p>
               <p className="text-[10px] text-[#C9A84C] font-black">{customer.points.toLocaleString()}</p>
             </div>
           </div>
 
           {/* QR Code */}
           <div className="bg-white p-1 rounded-lg shadow-lg">
-            <QRCodeSVG 
+            <QRCodeCanvas 
               value={customer.customerId} 
               size={52} 
               level="H"

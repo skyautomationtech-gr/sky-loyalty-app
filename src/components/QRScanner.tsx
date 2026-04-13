@@ -29,6 +29,21 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
   const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: 'environment' } 
+    })
+    .then(stream => {
+      stream.getTracks().forEach(t => t.stop())
+      setHasPermission(true);
+    })
+    .catch(err => {
+      console.error("Camera permission denied:", err);
+      setHasPermission(false);
+      alert('ক্যামেরা অনুমতি দিন: Settings → Apps → Sky Loyalty → Permissions → Camera → Allow')
+    })
+  }, [])
+
+  useEffect(() => {
     const startScanner = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -52,14 +67,12 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
             }
           }
         );
-        setHasPermission(true);
       } catch (err) {
         console.error("Camera error:", err);
-        setHasPermission(false);
       }
     };
 
-    if (isScanning && !scannedCustomer) {
+    if (isScanning && !scannedCustomer && hasPermission === true) {
       startScanner();
     }
 
@@ -71,7 +84,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
-  }, [isScanning, scannedCustomer]);
+  }, [isScanning, scannedCustomer, hasPermission]);
 
   const handleSuccessfulScan = async (decodedText: string) => {
     if (!decodedText) return;
