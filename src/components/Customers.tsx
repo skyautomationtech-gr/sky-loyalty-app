@@ -310,55 +310,30 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
         return;
       }
       
+      // Improved html2canvas settings for better rendering on mobile
       const canvas = await html2canvas(cardElement, {
-        scale: 3,
+        scale: 2,
         useCORS: true,
         allowTaint: true,
         logging: false,
         backgroundColor: '#000000',
-        windowWidth: cardElement.scrollWidth,
-        windowHeight: cardElement.scrollHeight,
+        windowWidth: 400, // Fixed width for consistent rendering
         onclone: (clonedDoc) => {
-          const style = clonedDoc.createElement('style');
-          style.innerHTML = `
-            * { color-scheme: light !important; }
-            :root {
-              --color-teal-primary: #00BFA6 !important;
-              --color-bg-light: #F8FFFE !important;
-              --color-dark-text: #1A2E35 !important;
-              --color-gray-text: #8A9BA8 !important;
-              --color-danger-red: #FF5252 !important;
-            }
-          `;
-          clonedDoc.head.appendChild(style);
+          const el = clonedDoc.getElementById('member-card');
+          if (el) {
+            el.style.transform = 'none';
+            el.style.borderRadius = '0';
+          }
         }
       });
       
-      const dataUrl = canvas.toDataURL('image/png');
+      const dataUrl = canvas.toDataURL('image/png', 1.0);
       setPreviewImage(dataUrl);
-      
-      // On mobile, show preview modal for better compatibility
-      if (window.innerWidth < 768) {
-        setShowPreview(true);
-        setIsDownloading(false);
-        return;
-      }
-
-      // On desktop, try direct download
-      const link = document.createElement('a');
-      link.href = dataUrl;
-      link.download = `${customer.customerId}-card.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      setToastMsg('কার্ড ডাউনলোড সফল হয়েছে ✅');
-      setToastType('success');
-      setShowToast(true);
+      setShowPreview(true);
       setIsDownloading(false);
       
     } catch (error: any) {
-      setToastMsg('ডাউনলোড হয়নি: ' + error.message);
+      setToastMsg('ত্রুটি: ' + error.message);
       setToastType('error');
       setShowToast(true);
       setIsDownloading(false);
@@ -368,28 +343,43 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
   const handleSharePreview = async () => {
     if (!previewImage) return;
     try {
-      const response = await fetch(previewImage);
-      const blob = await response.blob();
-      const file = new File([blob], `${customer.customerId}-card.png`, { type: 'image/png' });
-      
-      if (navigator.share && navigator.canShare({ files: [file] })) {
+      // Convert DataURL to Blob manually for better compatibility
+      const parts = previewImage.split(';base64,');
+      const contentType = parts[0].split(':')[1];
+      const raw = window.atob(parts[1]);
+      const rawLength = raw.length;
+      const uInt8Array = new Uint8Array(rawLength);
+      for (let i = 0; i < rawLength; ++i) {
+        uInt8Array[i] = raw.charCodeAt(i);
+      }
+      const blob = new Blob([uInt8Array], { type: contentType });
+      const file = new File([blob], `SKY-${customer.customerId}.png`, { type: 'image/png' });
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: 'Sky Loyalty Card',
+          text: `Customer: ${customer.name} (${customer.customerId})`
         });
       } else {
-        // Fallback for browsers that don't support file sharing
+        // Fallback: Trigger direct download via blob URL
+        const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = previewImage;
-        link.download = `${customer.customerId}-card.png`;
+        link.href = url;
+        link.download = `SKY-${customer.customerId}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
         setToastMsg('ডাউনলোড শুরু হয়েছে');
         setShowToast(true);
       }
     } catch (e) {
-      console.error('Share failed:', e);
+      // Final fallback: Open in new window
+      const link = document.createElement('a');
+      link.href = previewImage;
+      link.download = `SKY-${customer.customerId}.png`;
+      link.click();
     }
   };
 
@@ -744,19 +734,36 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
                 </button>
               </div>
               
-              <div className="bg-white p-2 rounded-3xl shadow-2xl">
-                <img src={previewImage} alt="Preview" className="w-full rounded-2xl" />
+              <div className="bg-white p-2 rounded-3xl shadow-2xl overflow-hidden">
+                <img 
+                  src={previewImage} 
+                  alt="Preview" 
+                  className="w-full h-auto rounded-2xl block" 
+                  style={{ pointerEvents: 'auto' }}
+                />
               </div>
 
               <div className="space-y-3">
                 <button 
                   onClick={handleSharePreview}
-                  className="w-full py-4 teal-gradient text-white rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg"
+                  className="w-full py-4 teal-gradient text-white rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-transform"
                 >
                   <Share2 className="w-5 h-5" /> গ্যালারিতে সেভ / শেয়ার করুন
                 </button>
-                <p className="text-white/50 text-[10px] text-center font-bold uppercase tracking-widest">
-                  টিপস: ছবির ওপর চেপে ধরেও সেভ করতে পারেন
+                <button 
+                  onClick={() => {
+                    const link = document.createElement('a');
+                    link.href = previewImage;
+                    link.download = `SKY-${customer.customerId}.png`;
+                    link.click();
+                  }}
+                  className="w-full py-4 bg-white/10 text-white rounded-2xl font-black flex items-center justify-center gap-2 border border-white/20 active:scale-95 transition-transform"
+                >
+                  <Download className="w-5 h-5" /> সরাসরি ডাউনলোড
+                </button>
+                <p className="text-white/50 text-[10px] text-center font-bold uppercase tracking-widest leading-relaxed">
+                  টিপস: উপরের ছবির ওপর চেপে ধরেও "Save Image" দিতে পারেন। <br/>
+                  অথবা শেয়ার বাটনে ক্লিক করে "Save to Device" সিলেক্ট করুন।
                 </p>
               </div>
             </div>

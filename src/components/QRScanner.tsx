@@ -29,32 +29,23 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
   const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ 
-      video: { facingMode: 'environment' } 
-    })
-    .then(stream => {
-      stream.getTracks().forEach(t => t.stop())
-      setHasPermission(true);
-    })
-    .catch(err => {
-      console.error("Camera permission denied:", err);
-      setHasPermission(false);
-      setToastMsg('ক্যামেরা অনুমতি দিন: Settings → Apps → Sky Loyalty → Permissions → Camera → Allow');
-      setToastType('error');
-      setShowToast(true);
-    })
-  }, [])
-
-  useEffect(() => {
     const startScanner = async () => {
       try {
+        setHasPermission(null);
         const stream = await navigator.mediaDevices.getUserMedia({ 
           video: { facingMode: 'environment' } 
         });
         streamRef.current = stream;
+        setHasPermission(true);
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          // Explicitly call play to handle browsers that block autoplay
+          try {
+            await videoRef.current.play();
+          } catch (playErr) {
+            console.warn("Autoplay blocked, user interaction might be needed:", playErr);
+          }
         }
 
         const codeReader = new BrowserQRCodeReader();
@@ -71,10 +62,14 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
         );
       } catch (err) {
         console.error("Camera error:", err);
+        setHasPermission(false);
+        setToastMsg('ক্যামেরা অনুমতি দিন এবং পেজটি রিফ্রেশ করুন');
+        setToastType('error');
+        setShowToast(true);
       }
     };
 
-    if (isScanning && !scannedCustomer && hasPermission === true) {
+    if (isScanning && !scannedCustomer) {
       startScanner();
     }
 
@@ -86,7 +81,7 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
-  }, [isScanning, scannedCustomer, hasPermission]);
+  }, [isScanning, scannedCustomer]);
 
   const handleSuccessfulScan = async (decodedText: string) => {
     if (!decodedText) return;
