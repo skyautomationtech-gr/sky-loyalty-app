@@ -39,7 +39,9 @@ export default function QRScanner({ onScan, onClose }: QRScannerProps) {
     .catch(err => {
       console.error("Camera permission denied:", err);
       setHasPermission(false);
-      alert('ক্যামেরা অনুমতি দিন: Settings → Apps → Sky Loyalty → Permissions → Camera → Allow')
+      setToastMsg('ক্যামেরা অনুমতি দিন: Settings → Apps → Sky Loyalty → Permissions → Camera → Allow');
+      setToastType('error');
+      setShowToast(true);
     })
   }, [])
 

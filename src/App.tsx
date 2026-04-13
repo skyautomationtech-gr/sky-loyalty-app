@@ -22,6 +22,7 @@ import TwoFactorAuth from './components/TwoFactorAuth';
 import ContactSupport from './components/ContactSupport';
 import PinLock from './components/PinLock';
 import ErrorBoundary from './components/ErrorBoundary';
+import Toast from './components/Toast';
 import { 
   Home, 
   Users, 
@@ -54,6 +55,9 @@ export default function App() {
   
   const [subView, setSubView] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
   useEffect(() => {
     // Splash screen timer
@@ -151,7 +155,9 @@ export default function App() {
     if (customer) {
       setActiveTab('customers');
     } else {
-      alert('Customer not found');
+      setToastMsg('কাস্টমার খুঁজে পাওয়া যায়নি');
+      setToastType('error');
+      setShowToast(true);
     }
   };
 
@@ -239,7 +245,11 @@ export default function App() {
         correctPin={localStorage.getItem('sky_app_lock_pin') || '0000'}
         onSuccess={() => setIsPinLocked(false)}
         onLogout={handleLogout}
-        onForgotPin={() => alert('Please use your email OTP to reset PIN (Coming Soon)')}
+        onForgotPin={() => {
+          setToastMsg('পিন রিসেট করতে আপনার ইমেইল OTP ব্যবহার করুন (শীঘ্রই আসছে)');
+          setToastType('error');
+          setShowToast(true);
+        }}
       />
     );
   }
@@ -393,6 +403,12 @@ export default function App() {
           );
         })}
       </nav>
+      <Toast 
+        show={showToast} 
+        message={toastMsg} 
+        type={toastType} 
+        onClose={() => setShowToast(false)} 
+      />
     </div>
     </ErrorBoundary>
   );
