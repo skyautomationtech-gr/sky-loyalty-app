@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, orderBy } from 'firebase/firestore';
 import { Staff, Role } from '../types';
 import { APP_LOGO, APP_NAME } from '../constants';
@@ -60,6 +60,8 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
       const staffData = snap.docs.map(d => ({ id: d.id, ...d.data() } as Staff));
       setStaff(staffData);
       setLoading(false);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'staff');
     });
     return unsub;
   }, []);
@@ -83,7 +85,8 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
 
     setLoading(true);
     try {
-      await addDoc(collection(db, 'staff'), {
+      const path = 'staff';
+      await addDoc(collection(db, path), {
         name: formData.name,
         email: formData.email,
         password: formData.password,
@@ -99,7 +102,7 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
       setToastType('success');
       setShowToast(true);
     } catch (err: any) {
-      console.error("Error adding staff:", err);
+      handleFirestoreError(err, OperationType.WRITE, 'staff');
       setError(err.message || 'স্টাফ যোগ করতে সমস্যা হয়েছে');
     } finally {
       setLoading(false);
@@ -111,7 +114,8 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
     if (!selectedStaff || selectedStaff.id === 'master') return;
     setLoading(true);
     try {
-      await updateDoc(doc(db, 'staff', selectedStaff.id), {
+      const path = 'staff';
+      await updateDoc(doc(db, path, selectedStaff.id), {
         name: formData.name,
         email: formData.email,
         password: formData.password,
@@ -124,7 +128,7 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
       setToastType('success');
       setShowToast(true);
     } catch (err) {
-      console.error('Error updating staff:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `staff/${selectedStaff.id}`);
       setToastMsg('আপডেট করতে সমস্যা হয়েছে');
       setToastType('error');
       setShowToast(true);
@@ -136,14 +140,15 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
   const handleDeleteStaff = async () => {
     if (!selectedStaff || selectedStaff.id === 'master') return;
     try {
-      await deleteDoc(doc(db, 'staff', selectedStaff.id));
+      const path = 'staff';
+      await deleteDoc(doc(db, path, selectedStaff.id));
       setIsDeleteModalOpen(false);
       setSelectedStaff(null);
       setToastMsg('স্টাফ ডিলিট করা হয়েছে');
       setToastType('success');
       setShowToast(true);
     } catch (err) {
-      console.error('Error deleting staff:', err);
+      handleFirestoreError(err, OperationType.DELETE, `staff/${selectedStaff.id}`);
       setToastMsg('ডিলিট করতে সমস্যা হয়েছে');
       setToastType('error');
       setShowToast(true);

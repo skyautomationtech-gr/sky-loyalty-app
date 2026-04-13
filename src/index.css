@@ -40,6 +40,9 @@
   .teal-gradient {
     background: linear-gradient(135deg, #00BFA6 0%, #009688 100%);
   }
+  .will-change-transform {
+    will-change: transform;
+  }
   .shimmer {
     background: linear-gradient(
       90deg,

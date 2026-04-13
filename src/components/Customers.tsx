@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Customer, Staff, Transaction } from '../types';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, addDoc, updateDoc, doc, deleteDoc, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { Search, Plus, Phone, MapPin, Zap, ShoppingBag, History, Edit2, Trash2, X, Download, Users, ChevronRight, MessageSquare, RefreshCw, ArrowUpRight, Sparkles, UserCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -60,7 +60,7 @@ export default function Customers({ user, customers }: CustomersProps) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: Math.min(idx * 0.02, 0.3) }}
             onClick={() => setSelectedCustomer(customer)}
-            className="bg-white border border-bg-light rounded-[2rem] p-4 flex justify-between items-center shadow-sm active:scale-[0.98] transition-all cursor-pointer group hover:border-teal-primary/20"
+            className="bg-white border border-bg-light rounded-[2rem] p-4 flex justify-between items-center shadow-sm active:scale-[0.98] transition-all cursor-pointer group hover:border-teal-primary/20 will-change-transform"
           >
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-2xl bg-teal-primary/10 flex items-center justify-center font-black text-teal-primary text-lg border-2 border-white shadow-sm group-hover:scale-110 transition-transform">
@@ -138,6 +138,8 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
     );
     const unsub = onSnapshot(q, (snap) => {
       setHistory(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'transactions');
     });
     return unsub;
   }, [customer.id]);
@@ -205,7 +207,8 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
     };
 
     try {
-      await updateDoc(doc(db, 'customers', customer.id), {
+      const path = 'customers';
+      await updateDoc(doc(db, path, customer.id), {
         points: newPoints,
         tier: newTier,
         lastVisit: new Date().toISOString()
@@ -237,7 +240,7 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
       setRedeemInput('');
       setPurchaseAmount('');
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.WRITE, 'customers/transactions');
       setToastMsg('ত্রুটি হয়েছে। আবার চেষ্টা করুন।');
       setToastType('error');
       setShowToast(true);
@@ -257,7 +260,8 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
 
     setLoading(true);
     try {
-      await updateDoc(doc(db, 'customers', customer.id), {
+      const path = 'customers';
+      await updateDoc(doc(db, path, customer.id), {
         name: editData.name,
         phone: editData.phone,
         address: editData.address
@@ -268,7 +272,7 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
       setShowToast(true);
       setIsEditMode(false);
     } catch (err) {
-      console.error('Error updating customer:', err);
+      handleFirestoreError(err, OperationType.UPDATE, `customers/${customer.id}`);
       setToastMsg('আপডেট করতে সমস্যা হয়েছে');
       setToastType('error');
       setShowToast(true);
@@ -280,10 +284,11 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
   const handleDelete = async () => {
     if (user?.role !== 'Admin' && user?.role !== 'Master Admin') return;
     try {
-      await deleteDoc(doc(db, 'customers', customer.id));
+      const path = 'customers';
+      await deleteDoc(doc(db, path, customer.id));
       onClose();
     } catch (err) {
-      console.error(err);
+      handleFirestoreError(err, OperationType.DELETE, `customers/${customer.id}`);
       setToastMsg('ডিলিট করতে সমস্যা হয়েছে।');
       setToastType('error');
       setShowToast(true);
@@ -294,38 +299,86 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
     if (user?.role !== 'Admin' && user?.role !== 'Master Admin') return;
     setIsDownloading(true);
     try {
-      const cardElement = document.getElementById('luxury-card-download');
-      if (cardElement) {
-        const canvas = await html2canvas(cardElement, {
-          scale: 3,
-          useCORS: true,
-          backgroundColor: null,
-          onclone: (clonedDoc) => {
-            // Force standard color parsing by removing modern CSS features from the clone
-            const style = clonedDoc.createElement('style');
-            style.innerHTML = `
-              * {
-                color-scheme: light !important;
-              }
-              :root {
-                --color-teal-primary: #00BFA6 !important;
-                --color-bg-light: #F8FFFE !important;
-                --color-dark-text: #1A2E35 !important;
-                --color-gray-text: #8A9BA8 !important;
-                --color-danger-red: #FF5252 !important;
-              }
-            `;
-            clonedDoc.head.appendChild(style);
-          }
-        });
-        const link = document.createElement('a');
-        link.download = `${customer.customerId}_Card.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
+      const cardElement = document.getElementById('member-card');
+      if (!cardElement) {
+        setToastMsg('কার্ড পাওয়া যাচ্ছে না!');
+        setToastType('error');
+        setShowToast(true);
+        return;
       }
-    } catch (err) {
-      console.error('Error downloading card:', err);
-    } finally {
+      
+      const canvas = await html2canvas(cardElement, {
+        scale: 3,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: '#000000',
+        windowWidth: cardElement.scrollWidth,
+        windowHeight: cardElement.scrollHeight,
+        onclone: (clonedDoc) => {
+          // Force standard color parsing by removing modern CSS features from the clone
+          const style = clonedDoc.createElement('style');
+          style.innerHTML = `
+            * {
+              color-scheme: light !important;
+            }
+            :root {
+              --color-teal-primary: #00BFA6 !important;
+              --color-bg-light: #F8FFFE !important;
+              --color-dark-text: #1A2E35 !important;
+              --color-gray-text: #8A9BA8 !important;
+              --color-danger-red: #FF5252 !important;
+            }
+          `;
+          clonedDoc.head.appendChild(style);
+        }
+      });
+      
+      // Try native share first (mobile)
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        
+        if (navigator.share && navigator.canShare) {
+          try {
+            const file = new File([blob], `${customer.customerId}-card.png`, { type: 'image/png' });
+            if (navigator.canShare({ files: [file] })) {
+              await navigator.share({
+                files: [file],
+                title: 'Sky Loyalty Card',
+              });
+              setToastMsg('কার্ড শেয়ার করা হয়েছে ✅');
+              setToastType('success');
+              setShowToast(true);
+              setIsDownloading(false);
+              return;
+            }
+          } catch (e) {
+            console.error('Share failed:', e);
+          }
+        }
+        
+        // Fallback download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${customer.customerId}-card.png`;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          setToastMsg('কার্ড ডাউনলোড সফল হয়েছে ✅');
+          setToastType('success');
+          setShowToast(true);
+          setIsDownloading(false);
+        }, 1000);
+      }, 'image/png', 1.0);
+      
+    } catch (error: any) {
+      setToastMsg('ডাউনলোড হয়নি: ' + error.message);
+      setToastType('error');
+      setShowToast(true);
       setIsDownloading(false);
     }
   };
@@ -351,7 +404,7 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
         <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar bg-[#F8FFFE]">
           {/* Luxury Card Section */}
           <div className="space-y-4">
-            <CustomerCard customer={customer} id="luxury-card-download" />
+            <CustomerCard customer={customer} id="member-card" />
             {(user?.role === 'Admin' || user?.role === 'Master Admin') && (
               <motion.button 
                 whileTap={{ scale: 0.98 }}

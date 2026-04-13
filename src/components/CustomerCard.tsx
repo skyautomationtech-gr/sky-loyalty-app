@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { Customer } from '../types';
 
@@ -7,7 +7,7 @@ interface CustomerCardProps {
   id?: string; // For html2canvas targeting
 }
 
-export default function CustomerCard({ customer, id }: CustomerCardProps) {
+function CustomerCard({ customer, id }: CustomerCardProps) {
   return (
     <div 
       id={id}
@@ -131,3 +131,5 @@ export default function CustomerCard({ customer, id }: CustomerCardProps) {
     </div>
   );
 }
+
+export default memo(CustomerCard);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from './firebase';
+import { db, auth, handleFirestoreError, OperationType } from './firebase';
 import { collection, onSnapshot, query, where, doc, getDoc, addDoc } from 'firebase/firestore';
 import { Staff, Customer, Notification } from './types';
 import Login from './components/Login';
@@ -55,6 +55,8 @@ export default function App() {
   
   const [subView, setSubView] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
@@ -70,6 +72,21 @@ export default function App() {
     };
   }, []);
 
+  // Firebase Connection Retry Logic
+  useEffect(() => {
+    if (error && retryCount < 5) {
+      setIsRetrying(true);
+      const timer = setTimeout(() => {
+        setRetryCount(prev => prev + 1);
+        window.location.reload(); // Simple reload to retry connection
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else if (error && retryCount >= 5) {
+      setIsRetrying(false);
+      setError('ইন্টারনেট চেক করুন');
+    }
+  }, [error, retryCount]);
+
   useEffect(() => {
     if (!staffInfo) return;
 
@@ -80,7 +97,8 @@ export default function App() {
         const newSessionId = Math.random().toString(36).substring(7);
         localStorage.setItem('sky_session_id', newSessionId);
         try {
-          await addDoc(collection(db, 'sessions'), {
+          const path = 'sessions';
+          await addDoc(collection(db, path), {
             id: newSessionId,
             staffId: staffInfo.id,
             deviceType: window.innerWidth < 430 ? 'Mobile' : 'Desktop',
@@ -89,7 +107,7 @@ export default function App() {
             isCurrent: true
           });
         } catch (err) {
-          console.error('Session tracking failed:', err);
+          handleFirestoreError(err, OperationType.WRITE, 'sessions');
         }
       }
     };
@@ -105,6 +123,8 @@ export default function App() {
         setStaffInfo(current);
         localStorage.setItem('sky_tech_session', JSON.stringify(current));
       }
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'staff');
     });
 
     return () => {
@@ -117,16 +137,22 @@ export default function App() {
 
     const unsubCustomers = onSnapshot(collection(db, 'customers'), (snap) => {
       setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Customer)));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'customers');
     });
 
     const unsubNotifs = onSnapshot(collection(db, 'notifications'), (snap) => {
       setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification))
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'notifications');
     });
 
     const unsubTransactions = onSnapshot(collection(db, 'transactions'), (snap) => {
       const redeems = snap.docs.filter(d => d.data().type === 'REDEEM').length;
       setRedeemCount(redeems);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'transactions');
     });
 
     return () => {
@@ -221,12 +247,18 @@ export default function App() {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-[#F8FFFE] p-8 text-center">
         <div className="w-20 h-20 rounded-[2rem] bg-danger-red/10 flex items-center justify-center mb-6">
-          <RefreshCw className="w-10 h-10 text-danger-red" />
+          <RefreshCw className={`w-10 h-10 text-danger-red ${isRetrying ? 'animate-spin' : ''}`} />
         </div>
-        <h2 className="text-xl font-black text-dark-text mb-2">সার্ভার সংযোগে সমস্যা</h2>
+        <h2 className="text-xl font-black text-dark-text mb-2">
+          {isRetrying ? 'সংযোগ হচ্ছে...' : 'সার্ভার সংযোগে সমস্যা'}
+        </h2>
         <p className="text-gray-text text-sm mb-8">{error}</p>
         <button 
-          onClick={() => window.location.reload()}
+          onClick={() => {
+            setRetryCount(0);
+            setError(null);
+            window.location.reload();
+          }}
           className="w-full h-14 teal-gradient text-white font-black rounded-2xl"
         >
           আবার চেষ্টা করুন

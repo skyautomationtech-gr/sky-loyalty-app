@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import React, { useMemo, memo } from 'react';
 import { Customer, Staff, Notification } from '../types';
 import { Users, Zap, ShieldCheck, ShoppingBag, Plus, TrendingUp, ArrowUpRight, Bell, Sparkles, Calendar } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -13,7 +13,7 @@ interface DashboardProps {
   onAddCustomer: () => void;
 }
 
-export default function Dashboard({ user, customers, staff, notifications, redeemCount, onAddCustomer }: DashboardProps) {
+function Dashboard({ user, customers, staff, notifications, redeemCount, onAddCustomer }: DashboardProps) {
   const totalPoints = useMemo(() => customers.reduce((acc, m) => acc + m.points, 0), [customers]);
   
   const getInitials = (name: string) => {
@@ -246,3 +246,5 @@ export default function Dashboard({ user, customers, staff, notifications, redee
     </div>
   );
 }
+
+export default memo(Dashboard);

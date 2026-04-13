@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { UserPlus, User, Phone, MapPin, Sparkles, ArrowRight, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -21,16 +21,21 @@ export default function AddCustomer({ onSuccess }: AddCustomerProps) {
   });
 
   const generateCustomerId = async () => {
-    const q = query(collection(db, 'customers'), orderBy('customerId', 'desc'), limit(1));
-    const snap = await getDocs(q);
-    
-    if (snap.empty) {
+    try {
+      const q = query(collection(db, 'customers'), orderBy('customerId', 'desc'), limit(1));
+      const snap = await getDocs(q);
+      
+      if (snap.empty) {
+        return 'SKY-00001';
+      } else {
+        const lastId = snap.docs[0].data().customerId;
+        const lastNum = parseInt(lastId.split('-')[1]);
+        const nextNum = lastNum + 1;
+        return `SKY-${nextNum.toString().padStart(5, '0')}`;
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, 'customers');
       return 'SKY-00001';
-    } else {
-      const lastId = snap.docs[0].data().customerId;
-      const lastNum = parseInt(lastId.split('-')[1]);
-      const nextNum = lastNum + 1;
-      return `SKY-${nextNum.toString().padStart(5, '0')}`;
     }
   };
 
@@ -63,7 +68,7 @@ export default function AddCustomer({ onSuccess }: AddCustomerProps) {
       setFormData({ name: '', phone: '', address: '' });
       setTimeout(() => onSuccess?.(), 2000);
     } catch (err) {
-      console.error('Error adding customer:', err);
+      handleFirestoreError(err, OperationType.WRITE, 'customers');
       setToastMsg('কাস্টমার যোগ করতে সমস্যা হয়েছে।');
       setToastType('error');
       setShowToast(true);
