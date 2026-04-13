@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Customer, Staff, Transaction } from '../types';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, addDoc, updateDoc, doc, deleteDoc, query, where, onSnapshot, orderBy } from 'firebase/firestore';
-import { Search, Plus, Phone, MapPin, Zap, ShoppingBag, History, Edit2, Trash2, X, Download, Users, ChevronRight, MessageSquare, RefreshCw, ArrowUpRight, Sparkles, UserCheck } from 'lucide-react';
+import { Search, Plus, Phone, MapPin, Zap, ShoppingBag, History, Edit2, Trash2, X, Download, Users, ChevronRight, MessageSquare, RefreshCw, ArrowUpRight, Sparkles, UserCheck, Share2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import CustomerCard from './CustomerCard';
 import html2canvas from 'html2canvas';
@@ -118,6 +118,8 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
   const [history, setHistory] = useState<Transaction[]>([]);
   const [addMode, setAddMode] = useState<'DIRECT' | 'AMOUNT'>('AMOUNT');
   const [isDownloading, setIsDownloading] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editData, setEditData] = useState({
@@ -304,6 +306,7 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
         setToastMsg('কার্ড পাওয়া যাচ্ছে না!');
         setToastType('error');
         setShowToast(true);
+        setIsDownloading(false);
         return;
       }
       
@@ -316,12 +319,9 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
         windowWidth: cardElement.scrollWidth,
         windowHeight: cardElement.scrollHeight,
         onclone: (clonedDoc) => {
-          // Force standard color parsing by removing modern CSS features from the clone
           const style = clonedDoc.createElement('style');
           style.innerHTML = `
-            * {
-              color-scheme: light !important;
-            }
+            * { color-scheme: light !important; }
             :root {
               --color-teal-primary: #00BFA6 !important;
               --color-bg-light: #F8FFFE !important;
@@ -334,52 +334,62 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
         }
       });
       
-      // Try native share first (mobile)
-      canvas.toBlob(async (blob) => {
-        if (!blob) return;
-        
-        if (navigator.share && navigator.canShare) {
-          try {
-            const file = new File([blob], `${customer.customerId}-card.png`, { type: 'image/png' });
-            if (navigator.canShare({ files: [file] })) {
-              await navigator.share({
-                files: [file],
-                title: 'Sky Loyalty Card',
-              });
-              setToastMsg('কার্ড শেয়ার করা হয়েছে ✅');
-              setToastType('success');
-              setShowToast(true);
-              setIsDownloading(false);
-              return;
-            }
-          } catch (e) {
-            console.error('Share failed:', e);
-          }
-        }
-        
-        // Fallback download
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${customer.customerId}-card.png`;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          setToastMsg('কার্ড ডাউনলোড সফল হয়েছে ✅');
-          setToastType('success');
-          setShowToast(true);
-          setIsDownloading(false);
-        }, 1000);
-      }, 'image/png', 1.0);
+      const dataUrl = canvas.toDataURL('image/png');
+      setPreviewImage(dataUrl);
+      
+      // On mobile, show preview modal for better compatibility
+      if (window.innerWidth < 768) {
+        setShowPreview(true);
+        setIsDownloading(false);
+        return;
+      }
+
+      // On desktop, try direct download
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = `${customer.customerId}-card.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setToastMsg('কার্ড ডাউনলোড সফল হয়েছে ✅');
+      setToastType('success');
+      setShowToast(true);
+      setIsDownloading(false);
       
     } catch (error: any) {
       setToastMsg('ডাউনলোড হয়নি: ' + error.message);
       setToastType('error');
       setShowToast(true);
       setIsDownloading(false);
+    }
+  };
+
+  const handleSharePreview = async () => {
+    if (!previewImage) return;
+    try {
+      const response = await fetch(previewImage);
+      const blob = await response.blob();
+      const file = new File([blob], `${customer.customerId}-card.png`, { type: 'image/png' });
+      
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Sky Loyalty Card',
+        });
+      } else {
+        // Fallback for browsers that don't support file sharing
+        const link = document.createElement('a');
+        link.href = previewImage;
+        link.download = `${customer.customerId}-card.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setToastMsg('ডাউনলোড শুরু হয়েছে');
+        setShowToast(true);
+      }
+    } catch (e) {
+      console.error('Share failed:', e);
     }
   };
 
@@ -716,6 +726,43 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
         type="danger"
         icon={<Trash2 className="w-8 h-8" />}
       />
+
+      {/* Mobile Preview Modal */}
+      <AnimatePresence>
+        {showPreview && previewImage && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/90 flex flex-col items-center justify-center p-6"
+          >
+            <div className="w-full max-w-sm space-y-6">
+              <div className="flex justify-between items-center text-white">
+                <h3 className="font-black text-lg">কার্ড প্রিভিউ</h3>
+                <button onClick={() => setShowPreview(false)} className="p-2 bg-white/10 rounded-full">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="bg-white p-2 rounded-3xl shadow-2xl">
+                <img src={previewImage} alt="Preview" className="w-full rounded-2xl" />
+              </div>
+
+              <div className="space-y-3">
+                <button 
+                  onClick={handleSharePreview}
+                  className="w-full py-4 teal-gradient text-white rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <Share2 className="w-5 h-5" /> গ্যালারিতে সেভ / শেয়ার করুন
+                </button>
+                <p className="text-white/50 text-[10px] text-center font-bold uppercase tracking-widest">
+                  টিপস: ছবির ওপর চেপে ধরেও সেভ করতে পারেন
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <Toast 
         show={showToast} 
