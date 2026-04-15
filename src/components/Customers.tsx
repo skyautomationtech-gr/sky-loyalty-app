@@ -78,20 +78,25 @@ function Customers({ user, customers, initialSelectedId, onClearInitialId }: Cus
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('lastVisit');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+
+  const selectedCustomer = useMemo(() => {
+    if (!selectedCustomerId) return null;
+    return customers.find(c => c.id === selectedCustomerId) || null;
+  }, [selectedCustomerId, customers]);
 
   useEffect(() => {
     if (initialSelectedId) {
       const customer = customers.find(c => c.customerId === initialSelectedId);
       if (customer) {
-        setSelectedCustomer(customer);
+        setSelectedCustomerId(customer.id);
         if (onClearInitialId) onClearInitialId();
       }
     }
   }, [initialSelectedId, customers, onClearInitialId]);
 
   const handleCustomerClick = useCallback((customer: Customer) => {
-    setSelectedCustomer(customer);
+    setSelectedCustomerId(customer.id);
   }, []);
 
   const filteredCustomers = useMemo(() => {
@@ -198,9 +203,10 @@ function Customers({ user, customers, initialSelectedId, onClearInitialId }: Cus
       <AnimatePresence>
         {selectedCustomer && (
           <CustomerDetailModal 
+            key={selectedCustomer.id}
             customer={selectedCustomer} 
             user={user}
-            onClose={() => setSelectedCustomer(null)} 
+            onClose={() => setSelectedCustomerId(null)} 
           />
         )}
       </AnimatePresence>
