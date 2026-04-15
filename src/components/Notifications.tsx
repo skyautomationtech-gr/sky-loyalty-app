@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { Notification } from '../types';
@@ -9,7 +9,7 @@ interface NotificationsProps {
   onBack: () => void;
 }
 
-export default function Notifications({ onBack }: NotificationsProps) {
+function Notifications({ onBack }: NotificationsProps) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -60,12 +60,8 @@ export default function Notifications({ onBack }: NotificationsProps) {
         ) : (
           <AnimatePresence mode="popLayout">
             {notifications.map((notif, idx) => (
-              <motion.div
+              <div
                 key={notif.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ delay: idx * 0.05 }}
                 className="bg-white border border-bg-light rounded-2xl p-4 flex gap-4 shadow-sm hover:border-teal-primary/20 transition-all group"
               >
                 <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
@@ -96,7 +92,7 @@ export default function Notifications({ onBack }: NotificationsProps) {
                     })}
                   </p>
                 </div>
-              </motion.div>
+              </div>
             ))}
           </AnimatePresence>
         )}
@@ -125,3 +121,5 @@ export default function Notifications({ onBack }: NotificationsProps) {
     </div>
   );
 }
+
+export default memo(Notifications);

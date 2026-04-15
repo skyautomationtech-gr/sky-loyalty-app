@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Staff } from '../types';
+import { useLanguage } from '../contexts/LanguageContext';
 import { 
   ArrowLeft,
   Moon,
@@ -63,18 +64,41 @@ interface SettingsProps {
   staff: Staff[];
   onLogout: () => void;
   onBack: () => void;
+  onNavigate: (view: string) => void;
 }
 
-export default function Settings({ onBack }: SettingsProps) {
+export default function Settings({ onBack, onNavigate, user }: SettingsProps) {
+  const { t, language, setLanguage } = useLanguage();
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [soonFeature, setSoonFeature] = useState<string | null>(null);
 
   const sections = [
     {
-      title: '🎨 APPEARANCE',
+      title: t('professional_features'),
       items: [
-        { icon: Moon, label: 'Dark/Light Theme', desc: 'অ্যাপের থিম পরিবর্তন করুন', color: 'bg-indigo-500' },
+        { icon: Gift, label: t('rewards'), desc: 'পুরস্কার তালিকা ম্যানেজ করুন', color: 'bg-teal-500', view: 'rewards' },
+        { icon: MapPin, label: t('branches'), desc: 'ব্রাঞ্চ ও লোকেশন ম্যানেজ করুন', color: 'bg-blue-500', view: 'branches', masterOnly: true },
+        { icon: FileSpreadsheet, label: t('import_export'), desc: 'CSV ইমপোর্ট ও এক্সপোর্ট', color: 'bg-emerald-500', view: 'import-export', adminOnly: true },
+        { icon: Globe, label: t('customer_portal'), desc: 'কাস্টমার সেলফ-সার্ভিস পোর্টাল', color: 'bg-indigo-500', action: () => window.open('?view=customer', '_blank') },
+      ]
+    },
+    {
+      title: t('appearance'),
+      items: [
+        { 
+          icon: Globe, 
+          label: t('language'), 
+          desc: language === 'bn' ? 'English এ পরিবর্তন করুন' : 'বাংলায় পরিবর্তন করুন', 
+          color: 'bg-teal-600',
+          action: () => {
+            const newLang = language === 'bn' ? 'en' : 'bn';
+            setLanguage(newLang);
+            setToastMsg(newLang === 'bn' ? 'ভাষা বাংলায় পরিবর্তন হয়েছে' : 'Language changed to English');
+            setShowToast(true);
+          }
+        },
+        { icon: Moon, label: t('theme'), desc: 'অ্যাপের থিম পরিবর্তন করুন', color: 'bg-indigo-500' },
         { icon: Palette, label: 'Custom Color', desc: 'নিজের পছন্দের রঙ বেছে নিন', color: 'bg-amber-500' },
         { icon: Type, label: 'Font Size', desc: 'লেখার সাইজ ছোট/মাঝারি/বড়', color: 'bg-blue-500' },
         { icon: Type, label: 'Font Style', desc: 'লেখার ধরন পরিবর্তন করুন', color: 'bg-cyan-500' },
@@ -138,14 +162,23 @@ export default function Settings({ onBack }: SettingsProps) {
       ]
     },
     {
-      title: '🔐 SECURITY',
+      title: t('security'),
       items: [
-        { icon: Lock, label: 'App Lock PIN', desc: 'অ্যাপ খুলতে PIN লাগবে', color: 'bg-slate-700' },
-        { icon: Fingerprint, label: 'Fingerprint Lock', desc: 'আঙুলের ছাপে অ্যাপ খুলুন', color: 'bg-blue-600' },
+        { icon: Lock, label: t('app_lock'), desc: 'অ্যাপ খুলতে PIN লাগবে', color: 'bg-slate-700', view: 'lock' },
+        { 
+          icon: Fingerprint, 
+          label: 'Fingerprint Lock', 
+          desc: 'আঙুলের ছাপে অ্যাপ খুলুন', 
+          color: 'bg-blue-600',
+          action: () => {
+            setToastMsg('Biometric setup is coming soon to this browser');
+            setShowToast(true);
+          }
+        },
         { icon: LogOut, label: 'Auto Logout Timer', desc: 'নির্দিষ্ট সময় পর অটো লগআউট', color: 'bg-orange-600' },
-        { icon: History, label: 'Login History', desc: 'কে কখন লগইন করেছে দেখুন', color: 'bg-indigo-600' },
+        { icon: History, label: 'Login History', desc: 'কে কখন লগইন করেছে দেখুন', color: 'bg-indigo-600', view: 'sessions' },
         { icon: Shield, label: 'IP Restriction', desc: 'নির্দিষ্ট IP থেকে লগইন', color: 'bg-red-600' },
-        { icon: Activity, label: 'Activity Log', desc: 'সব কার্যক্রমের লগ দেখুন', color: 'bg-teal-600' },
+        { icon: Activity, label: t('audit_logs'), desc: 'সব কার্যক্রমের লগ দেখুন', color: 'bg-teal-600', view: 'audit-logs', adminOnly: true },
       ]
     },
     {
@@ -197,7 +230,7 @@ export default function Settings({ onBack }: SettingsProps) {
         >
           <ArrowLeft className="w-6 h-6" />
         </motion.button>
-        <h1 className="text-xl font-black text-dark-text tracking-tight">App Settings</h1>
+        <h1 className="text-xl font-black text-dark-text tracking-tight">{t('settings')}</h1>
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 pb-24 space-y-10 mt-4 no-scrollbar">
@@ -212,8 +245,19 @@ export default function Settings({ onBack }: SettingsProps) {
                 <motion.button
                   key={i}
                   whileTap={{ scale: 0.98 }}
-                  onClick={item.isVersion ? undefined : () => handleSoon(item.label)}
-                  className={`w-full flex items-center justify-between p-4 rounded-[2rem] transition-all hover:bg-bg-light group ${i !== section.items.length - 1 ? 'mb-1' : ''}`}
+                  onClick={() => {
+                    if (item.isVersion) return;
+                    if (item.action) {
+                      item.action();
+                    } else if (item.view) {
+                      onNavigate(item.view);
+                    } else {
+                      handleSoon(item.label);
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between p-4 rounded-[2rem] transition-all hover:bg-bg-light group ${i !== section.items.length - 1 ? 'mb-1' : ''} ${
+                    (item.masterOnly && user?.role !== 'Master Admin') || (item.adminOnly && user?.role !== 'Admin' && user?.role !== 'Master Admin') ? 'opacity-50 pointer-events-none' : ''
+                  }`}
                 >
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-2xl ${item.color} flex items-center justify-center text-white shadow-lg shadow-black/5 group-hover:scale-110 transition-transform`}>
@@ -226,6 +270,8 @@ export default function Settings({ onBack }: SettingsProps) {
                   </div>
                   {item.isVersion ? (
                     <span className="text-[10px] font-black text-teal-primary bg-teal-primary/10 px-4 py-1.5 rounded-full border border-teal-primary/10">V1.0.0</span>
+                  ) : item.view || item.action ? (
+                    <ArrowLeft className="w-4 h-4 text-gray-text rotate-180" />
                   ) : (
                     <span className="text-[7px] font-black text-teal-primary bg-teal-primary/10 px-2.5 py-1 rounded-full uppercase tracking-widest border border-teal-primary/10">
                       SOON 🚀

@@ -12,7 +12,8 @@
         "tier": { "type": "string", "enum": ["BRONZE", "SILVER", "GOLD", "PLATINUM"], "description": "Loyalty tier" },
         "customerId": { "type": "string", "description": "Unique customer ID (e.g., SKY-00001)" },
         "joinedAt": { "type": "string", "format": "date-time", "description": "Join date" },
-        "lastVisit": { "type": "string", "format": "date-time", "description": "Last visit date" }
+        "lastVisit": { "type": "string", "format": "date-time", "description": "Last visit date" },
+        "branchId": { "type": "string", "description": "ID of the branch where customer joined" }
       },
       "required": ["name", "phone", "points", "tier", "customerId"]
     },
@@ -28,20 +29,38 @@
         "pin": { "type": "string", "description": "Security PIN" },
         "addedBy": { "type": "string", "description": "Who added this staff" },
         "addedDate": { "type": "string", "format": "date-time", "description": "When added" },
-        "status": { "type": "string", "enum": ["active", "inactive"], "description": "Account status" }
+        "status": { "type": "string", "enum": ["active", "inactive"], "description": "Account status" },
+        "branchId": { "type": "string", "description": "Assigned branch ID" }
       },
       "required": ["name", "email", "password", "role", "pin", "addedBy", "addedDate", "status"]
     },
-    "Rule": {
-      "title": "Loyalty Rule",
-      "description": "A rule for earning points",
+    "Branch": {
+      "title": "Branch",
+      "description": "A business location",
       "type": "object",
       "properties": {
-        "name": { "type": "string", "description": "Rule name" },
-        "points": { "type": "number", "description": "Points awarded" },
-        "trigger": { "type": "string", "description": "Condition for triggering" }
+        "name": { "type": "string", "description": "Branch name" },
+        "location": { "type": "string", "description": "Address" },
+        "phone": { "type": "string", "description": "Contact number" },
+        "managerId": { "type": "string", "description": "ID of the branch manager" },
+        "status": { "type": "string", "enum": ["active", "inactive"], "description": "Branch status" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When created" }
       },
-      "required": ["name", "points", "trigger"]
+      "required": ["name", "location", "status", "createdAt"]
+    },
+    "Reward": {
+      "title": "Reward",
+      "description": "An item that can be redeemed",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Reward name" },
+        "description": { "type": "string", "description": "Details" },
+        "pointsRequired": { "type": "number", "description": "Points needed to redeem" },
+        "image": { "type": "string", "description": "Image URL" },
+        "status": { "type": "string", "enum": ["active", "inactive"], "description": "Availability" },
+        "category": { "type": "string", "description": "Reward category" }
+      },
+      "required": ["name", "pointsRequired", "status"]
     },
     "Transaction": {
       "title": "Transaction",
@@ -54,7 +73,9 @@
         "pointsAfter": { "type": "number", "description": "Balance after transaction" },
         "description": { "type": "string", "description": "Transaction details" },
         "timestamp": { "type": "string", "format": "date-time", "description": "When it happened" },
-        "staffId": { "type": "string", "description": "ID of the staff who processed it" }
+        "staffId": { "type": "string", "description": "ID of the staff who processed it" },
+        "branchId": { "type": "string", "description": "ID of the branch where it occurred" },
+        "rewardId": { "type": "string", "description": "ID of the reward if redeemed" }
       },
       "required": ["customerId", "type", "amount", "pointsAfter", "timestamp", "staffId"]
     },
@@ -74,7 +95,8 @@
   "firestore": {
     "/customers/{customerId}": { "schema": "Customer", "description": "Loyalty customers" },
     "/staff/{staffId}": { "schema": "Staff", "description": "System operators" },
-    "/admins/{adminId}": { "schema": "Staff", "description": "System admins" },
+    "/branches/{branchId}": { "schema": "Branch", "description": "Business locations" },
+    "/rewards/{rewardId}": { "schema": "Reward", "description": "Redeemable items" },
     "/transactions/{transactionId}": { "schema": "Transaction", "description": "Point history" },
     "/notifications/{notificationId}": { "schema": "Notification", "description": "System alerts" }
   }

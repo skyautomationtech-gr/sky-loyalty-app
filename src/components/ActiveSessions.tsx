@@ -78,12 +78,8 @@ export default function ActiveSessions({ user, onBack, onLogoutAll }: ActiveSess
       <div className="space-y-4 px-2">
         <AnimatePresence mode="popLayout">
           {sessions.map((session, idx) => (
-            <motion.div
+            <div
               key={session.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ delay: idx * 0.05 }}
               className="bg-white border border-bg-light rounded-[2.5rem] p-6 shadow-sm flex justify-between items-center group hover:border-teal-primary/20 transition-all"
             >
               <div className="flex items-center gap-5">
@@ -115,7 +111,7 @@ export default function ActiveSessions({ user, onBack, onLogoutAll }: ActiveSess
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
           ))}
         </AnimatePresence>
       </div>

@@ -1,8 +1,87 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getStaffData() {
+      return get(/databases/$(database)/documents/staff/$(request.auth.uid)).data;
+    }
+
+    function isMasterAdmin() {
+      return isAuthenticated() && (
+        (request.auth.token.email == "skyautomationtech@gmail.com" && request.auth.token.email_verified == true) ||
+        (exists(/databases/$(database)/documents/staff/$(request.auth.uid)) && getStaffData().role == 'Master Admin')
+      );
+    }
+
+    function isAdmin() {
+      return isMasterAdmin() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/staff/$(request.auth.uid)) && 
+        getStaffData().role == 'Admin'
+      );
+    }
+
+    function isStaff() {
+      return isAdmin() || (
+        isAuthenticated() && 
+        exists(/databases/$(database)/documents/staff/$(request.auth.uid)) && 
+        getStaffData().role == 'Staff'
+      );
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /customers/{customerId} {
+      allow read: if isStaff();
+      allow create, update: if isStaff();
+      allow delete: if isMasterAdmin();
+    }
+
+    match /staff/{staffId} {
+      allow read: if isStaff();
+      allow create, update, delete: if isMasterAdmin();
+    }
+
+    match /branches/{branchId} {
+      allow read: if isStaff();
+      allow create, update, delete: if isMasterAdmin();
+    }
+
+    match /rewards/{rewardId} {
+      allow read: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if isMasterAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update, delete: if isMasterAdmin();
+    }
+
+    match /sessions/{sessionId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isMasterAdmin();
+      allow create: if isAuthenticated();
+      allow delete: if isMasterAdmin();
     }
   }
 }

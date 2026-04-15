@@ -4,8 +4,8 @@
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   
-  --color-teal-primary: #00BFA6;
-  --color-bg-light: #F8FFFE;
+  --color-teal-primary: #EAB308; /* Changed to Yellow as requested */
+  --color-bg-light: #F9FAFB; /* Very light gray for contrast against white */
   --color-dark-text: #1A2E35;
   --color-gray-text: #8A9BA8;
   --color-danger-red: #FF5252;
@@ -17,7 +17,7 @@
 
 @layer base {
   body {
-    @apply font-sans bg-bg-light text-dark-text antialiased;
+    @apply font-sans bg-white text-dark-text antialiased;
     -webkit-tap-highlight-color: transparent;
     max-width: 430px;
     margin: 0 auto;
@@ -35,10 +35,10 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
   .glass-card {
-    @apply bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] border border-[#E8F0EF];
+    @apply bg-white shadow-[0_2px_12px_rgba(0,0,0,0.06)] border border-[#F3F4F6];
   }
   .teal-gradient {
-    background: linear-gradient(135deg, #00BFA6 0%, #009688 100%);
+    background: linear-gradient(135deg, #FDE047 0%, #EAB308 100%); /* Yellow gradient */
   }
   .will-change-transform {
     will-change: transform;

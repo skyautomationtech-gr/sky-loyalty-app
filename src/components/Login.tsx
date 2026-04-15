@@ -1,6 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
-import { db } from '../firebase';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { useState, useEffect, useRef, memo } from 'react';
+import { db, auth } from '../firebase';
+import { collection, query, where, getDocs, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  updateProfile
+} from 'firebase/auth';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShieldCheck, 
@@ -19,15 +24,21 @@ import {
 import { Staff } from '../types';
 import emailjs from '@emailjs/browser';
 import { APP_LOGO, APP_NAME } from '../constants';
+import { logAction } from '../services/auditService';
+import { OperationType, handleFirestoreError } from '../firebase';
 
 interface LoginProps {
   onLogin: (staff: Staff) => void;
+  onCustomerPortal: () => void;
 }
 
-export default function Login({ onLogin }: LoginProps) {
-  const [mode, setMode] = useState<'SELECT' | 'ADMIN' | 'STAFF' | 'OTP'>('SELECT');
+function Login({ onLogin, onCustomerPortal }: LoginProps) {
+  const [mode, setMode] = useState<'SELECT' | 'ADMIN' | 'STAFF' | 'OTP' | 'FORGOT_PASSWORD' | 'RESET_PASSWORD'>('SELECT');
+  const [flowType, setFlowType] = useState<'LOGIN' | 'RESET'>('LOGIN');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [generatedOtp, setGeneratedOtp] = useState('');
@@ -36,6 +47,14 @@ export default function Login({ onLogin }: LoginProps) {
   const [pendingUser, setPendingUser] = useState<Staff | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [userIp, setUserIp] = useState('');
+
+  useEffect(() => {
+    fetch('https://api.ipify.org?format=json')
+      .then(res => res.json())
+      .then(data => setUserIp(data.ip))
+      .catch(() => setUserIp('Unknown'));
+  }, []);
   
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -56,7 +75,7 @@ export default function Login({ onLogin }: LoginProps) {
     return `${user.substring(0, 3)}***@${domain}`;
   };
 
-  const generateAndSendOtp = async (user: Staff) => {
+  const generateAndSendOtp = async (user: Staff, isReset: boolean = false) => {
     setLoading(true);
     setError('');
     const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -64,6 +83,7 @@ export default function Login({ onLogin }: LoginProps) {
     setOtpExpiry(Date.now() + 5 * 60 * 1000); // 5 minutes
     setResendTimer(30);
     setPendingUser(user);
+    setFlowType(isReset ? 'RESET' : 'LOGIN');
 
     try {
       const SERVICE_ID = "service_tps9s6a";
@@ -76,7 +96,8 @@ export default function Login({ onLogin }: LoginProps) {
           to_email: user.email,
           passcode: code,
           time: new Date().toLocaleTimeString(),
-          company_name: APP_NAME
+          company_name: APP_NAME,
+          subject: isReset ? "Password Reset Verification" : "Login Verification"
         }
       );
       setMode('OTP');
@@ -88,43 +109,167 @@ export default function Login({ onLogin }: LoginProps) {
     }
   };
 
+  const handleForgotPassword = async (e: any) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const q = query(collection(db, 'staff'), where('email', '==', email));
+      const snap = await getDocs(q);
+
+      if (!snap.empty) {
+        const userData = snap.docs[0].data();
+        await generateAndSendOtp({ id: snap.docs[0].id, ...userData } as Staff, true);
+      } else {
+        setError('এই ইমেইলটি সিস্টেমে পাওয়া যায়নি।');
+      }
+    } catch (err) {
+      console.error('Forgot password error:', err);
+      setError('সিস্টেম ত্রুটি। আবার চেষ্টা করুন।');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: any) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setError('পাসওয়ার্ড মিলছে না।');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      if (pendingUser) {
+        const userRef = doc(db, 'staff', pendingUser.id);
+        await updateDoc(userRef, { password: newPassword });
+        
+        await logAction({
+          action: 'PASSWORD_RESET_SUCCESS',
+          staffId: pendingUser.id,
+          staffName: pendingUser.name,
+          details: 'Password successfully reset'
+        });
+
+        setMode('SELECT');
+        setError('পাসওয়ার্ড সফলভাবে পরিবর্তন হয়েছে। লগইন করুন।');
+        setEmail('');
+        setPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+    } catch (err) {
+      console.error('Reset password error:', err);
+      setError('পাসওয়ার্ড পরিবর্তন করতে ব্যর্থ হয়েছে।');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCredentialSubmit = async (e: any) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     
     try {
-      if (email === "skyautomationtech@gmail.com" && password === "Prime@Lock_57Zu") {
-        const masterAdmin: Staff = {
-          id: 'master-admin',
-          name: 'Master Admin',
-          email: 'skyautomationtech@gmail.com',
-          role: 'Master Admin',
-          pin: '0000',
-          addedBy: 'System',
-          addedDate: new Date(0).toISOString(),
-          status: 'active'
-        };
-        await generateAndSendOtp(masterAdmin);
-        return;
-      }
-
-      const q = query(
-        collection(db, 'staff'), 
-        where('email', '==', email),
-        where('password', '==', password)
-      );
-      const snap = await getDocs(q);
-      
-      if (!snap.empty) {
-        const userData = snap.docs[0].data();
-        if (userData.status === 'inactive') {
-          setError('অ্যাকাউন্টটি নিষ্ক্রিয়। অ্যাডমিনের সাথে যোগাযোগ করুন।');
+      // 1. Try to sign in with Firebase Auth first
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        
+        // Fetch staff data from Firestore to get role and other details
+        const q = query(collection(db, 'staff'), where('email', '==', email));
+        const snap = await getDocs(q);
+        
+        if (!snap.empty) {
+          const userData = snap.docs[0].data() as Staff;
+          if (userData.status === 'inactive') {
+            setError('অ্যাকাউন্টটি নিষ্ক্রিয়। অ্যাডমিনের সাথে যোগাযোগ করুন।');
+            await auth.signOut();
+            return;
+          }
+          
+          // Ensure Firestore doc has the correct UID and is indexed by UID
+          if (snap.docs[0].id !== user.uid) {
+            const oldData = snap.docs[0].data();
+            await setDoc(doc(db, 'staff', user.uid), { ...oldData, uid: user.uid });
+            await deleteDoc(doc(db, 'staff', snap.docs[0].id));
+          }
+          
+          await generateAndSendOtp({ id: user.uid, ...snap.docs[0].data(), uid: user.uid } as Staff);
+          return;
+        } else if (email === "skyautomationtech@gmail.com") {
+          // Special case for Master Admin: Ensure they have a doc in staff collection
+          const masterAdminData = {
+            uid: user.uid,
+            name: 'Master Admin',
+            email: 'skyautomationtech@gmail.com',
+            role: 'Master Admin',
+            pin: '0000',
+            addedBy: 'System',
+            addedDate: new Date('2024-01-01T00:00:00.000Z').toISOString(),
+            status: 'active'
+          };
+          await setDoc(doc(db, 'staff', user.uid), masterAdminData, { merge: true });
+          await generateAndSendOtp({ id: user.uid, ...masterAdminData } as Staff);
           return;
         }
-        await generateAndSendOtp({ id: snap.docs[0].id, ...userData } as Staff);
-      } else {
-        setError('অ্যাক্সেস ডিনাইড। অ্যাডমিনের সাথে যোগাযোগ করুন।');
+      } catch (authErr: any) {
+        // 2. If user not found in Auth, check Firestore for auto-migration
+        if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential') {
+          const q = query(
+            collection(db, 'staff'), 
+            where('email', '==', email),
+            where('password', '==', password)
+          );
+          const snap = await getDocs(q);
+          
+          if (!snap.empty) {
+            const userData = snap.docs[0].data() as Staff;
+            if (userData.status === 'inactive') {
+              setError('অ্যাকাউন্টটি নিষ্ক্রিয়। অ্যাডমিনের সাথে যোগাযোগ করুন।');
+              return;
+            }
+
+            // AUTO-MIGRATION: Create Firebase Auth account using existing credentials
+            try {
+              const newUserCred = await createUserWithEmailAndPassword(auth, email, password);
+              await updateProfile(newUserCred.user, { displayName: userData.name });
+              
+              // Create new doc with UID as ID and delete old one
+              await setDoc(doc(db, 'staff', newUserCred.user.uid), { ...userData, uid: newUserCred.user.uid });
+              await deleteDoc(doc(db, 'staff', snap.docs[0].id));
+              
+              await generateAndSendOtp({ id: newUserCred.user.uid, ...userData, uid: newUserCred.user.uid } as Staff);
+              return;
+            } catch (createErr: any) {
+              console.error('Auto-migration failed:', createErr);
+              // If migration fails but credentials matched, we might have a conflict or disabled provider
+              if (createErr.code === 'auth/email-already-in-use') {
+                setError('এই ইমেইলটি ইতিমধ্যে ব্যবহৃত হচ্ছে। পাসওয়ার্ড ভুল হতে পারে।');
+              } else {
+                setError('সিকিউরিটি আপডেট করতে সমস্যা হয়েছে। অ্যাডমিনের সাথে যোগাযোগ করুন।');
+              }
+              return;
+            }
+          }
+        }
+        
+        // Handle specific auth errors
+        if (authErr.code === 'auth/wrong-password' || authErr.code === 'auth/invalid-credential') {
+          setError('ভুল ইমেইল বা পাসওয়ার্ড।');
+        } else if (authErr.code === 'auth/too-many-requests') {
+          setError('অতিরিক্ত চেষ্টার কারণে অ্যাকাউন্টটি সাময়িকভাবে লক করা হয়েছে। পরে চেষ্টা করুন।');
+        } else {
+          setError('লগইন করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।');
+        }
       }
     } catch (err) {
       console.error('Login error:', err);
@@ -161,7 +306,18 @@ export default function Login({ onLogin }: LoginProps) {
       return;
     }
     if (enteredOtp === generatedOtp && pendingUser) {
-      onLogin(pendingUser);
+      if (flowType === 'RESET') {
+        setMode('RESET_PASSWORD');
+        setLoading(false);
+      } else {
+        logAction({
+          action: 'LOGIN',
+          staffId: pendingUser.id,
+          staffName: pendingUser.name,
+          details: 'Successful login via OTP'
+        });
+        onLogin(pendingUser);
+      }
     } else {
       setError('ভুল কোড। আবার চেষ্টা করুন।');
       setOtp(['', '', '', '', '', '']);
@@ -171,7 +327,7 @@ export default function Login({ onLogin }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen bg-bg-light flex flex-col items-center justify-center p-6 relative overflow-hidden">
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
       {/* Background Decorations */}
       <div className="absolute -top-24 -left-24 w-64 h-64 bg-teal-primary/5 rounded-full blur-3xl" />
       <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-teal-primary/5 rounded-full blur-3xl" />
@@ -229,6 +385,16 @@ export default function Login({ onLogin }: LoginProps) {
                   </div>
                   <ArrowRight className="w-5 h-5 ml-auto opacity-30" />
                 </motion.button>
+
+                <div className="pt-4">
+                  <button 
+                    onClick={onCustomerPortal}
+                    className="w-full py-4 text-teal-primary font-black text-xs uppercase tracking-widest border-2 border-dashed border-teal-primary/20 rounded-2xl hover:bg-teal-primary/5 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    কাস্টমার পোর্টাল
+                  </button>
+                </div>
               </div>
 
               <div className="mt-12 flex items-center justify-center gap-2">
@@ -292,6 +458,15 @@ export default function Login({ onLogin }: LoginProps) {
                       {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </button>
                   </div>
+                  <div className="flex justify-end">
+                    <button 
+                      type="button" 
+                      onClick={() => { setMode('FORGOT_PASSWORD'); setError(''); }}
+                      className="text-[10px] font-black text-teal-primary uppercase tracking-widest hover:underline"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
                 </div>
 
                 {error && (
@@ -310,6 +485,138 @@ export default function Login({ onLogin }: LoginProps) {
                     <>
                       <span>OTP কোড পাঠান</span>
                       <ArrowRight className="w-5 h-5" />
+                    </>
+                  )}
+                </motion.button>
+              </form>
+            </motion.div>
+          )}
+
+          {mode === 'FORGOT_PASSWORD' && (
+            <motion.div
+              key="forgot-password"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="p-10"
+            >
+              <button onClick={() => { setMode('SELECT'); setError(''); }} className="flex items-center gap-2 text-gray-text text-xs font-black uppercase tracking-widest mb-10 hover:text-teal-primary transition-colors group">
+                <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" /> ফিরে যান
+              </button>
+
+              <div className="flex flex-col items-center text-center mb-10">
+                <div className="w-20 h-20 rounded-[2rem] bg-teal-primary/10 flex items-center justify-center mb-6">
+                  <Mail className="w-10 h-10 text-teal-primary" />
+                </div>
+                <h2 className="text-2xl font-black text-dark-text mb-1 tracking-tight">পাসওয়ার্ড রিসেট</h2>
+                <p className="text-gray-text text-sm font-bold px-4">আপনার ইমেইল দিন, আমরা একটি ভেরিফিকেশন কোড পাঠাবো</p>
+              </div>
+
+              <form onSubmit={handleForgotPassword} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-dark-text ml-1 uppercase tracking-widest">Email Address</label>
+                  <div className="relative group">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-text group-focus-within:text-teal-primary transition-colors" />
+                    <input
+                      type="email"
+                      placeholder="name@company.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      className="w-full h-[56px] bg-bg-light rounded-2xl pl-12 pr-4 text-dark-text font-bold text-sm focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10"
+                    />
+                  </div>
+                </div>
+
+                {error && (
+                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-danger-red text-[10px] font-black text-center bg-danger-red/5 py-4 rounded-2xl border border-danger-red/10">
+                    {error}
+                  </motion.div>
+                )}
+
+                <motion.button 
+                  whileTap={{ scale: 0.98 }}
+                  type="submit" 
+                  disabled={loading} 
+                  className="w-full h-[56px] teal-gradient text-white font-black rounded-2xl shadow-xl shadow-teal-primary/20 transition-all flex items-center justify-center gap-3"
+                >
+                  {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : (
+                    <>
+                      <span>OTP পাঠান</span>
+                      <ArrowRight className="w-5 h-5" />
+                    </>
+                  )}
+                </motion.button>
+              </form>
+            </motion.div>
+          )}
+
+          {mode === 'RESET_PASSWORD' && (
+            <motion.div
+              key="reset-password"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="p-10"
+            >
+              <div className="flex flex-col items-center text-center mb-10">
+                <div className="w-20 h-20 rounded-[2rem] bg-teal-primary flex items-center justify-center mb-6 shadow-xl shadow-teal-primary/20">
+                  <Lock className="w-10 h-10 text-white" />
+                </div>
+                <h2 className="text-2xl font-black text-dark-text mb-1 tracking-tight">নতুন পাসওয়ার্ড</h2>
+                <p className="text-gray-text text-sm font-bold">আপনার নতুন পাসওয়ার্ড সেট করুন</p>
+              </div>
+
+              <form onSubmit={handleResetPassword} className="space-y-5">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-dark-text ml-1 uppercase tracking-widest">New Password</label>
+                  <div className="relative group">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-text group-focus-within:text-teal-primary transition-colors" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                      className="w-full h-[56px] bg-bg-light rounded-2xl pl-12 pr-12 text-dark-text font-bold text-sm focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10"
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-text hover:text-teal-primary transition-colors">
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-dark-text ml-1 uppercase tracking-widest">Confirm Password</label>
+                  <div className="relative group">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-text group-focus-within:text-teal-primary transition-colors" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                      className="w-full h-[56px] bg-bg-light rounded-2xl pl-12 pr-12 text-dark-text font-bold text-sm focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10"
+                    />
+                  </div>
+                </div>
+
+                {error && (
+                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-danger-red text-[10px] font-black text-center bg-danger-red/5 py-4 rounded-2xl border border-danger-red/10">
+                    {error}
+                  </motion.div>
+                )}
+
+                <motion.button 
+                  whileTap={{ scale: 0.98 }}
+                  type="submit" 
+                  disabled={loading} 
+                  className="w-full h-[56px] teal-gradient text-white font-black rounded-2xl shadow-xl shadow-teal-primary/20 transition-all flex items-center justify-center gap-3"
+                >
+                  {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : (
+                    <>
+                      <span>পাসওয়ার্ড আপডেট করুন</span>
+                      <CheckCircle2 className="w-5 h-5" />
                     </>
                   )}
                 </motion.button>
@@ -341,7 +648,7 @@ export default function Login({ onLogin }: LoginProps) {
                 </div>
               </div>
 
-              <div className="flex justify-center gap-2 mb-10 w-full px-5 box-border">
+              <div className="flex justify-center gap-3 mb-10 w-full px-2">
                 {otp.map((digit, idx) => (
                   <input
                     key={idx}
@@ -352,9 +659,9 @@ export default function Login({ onLogin }: LoginProps) {
                     value={digit}
                     onChange={(e) => handleOtpChange(idx, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                    className={`w-[45px] h-[55px] rounded-xl text-center text-2xl font-black transition-all border-2 flex-shrink-0 ${
+                    className={`w-12 h-16 rounded-2xl text-center text-2xl font-black transition-all border-2 ${
                       digit 
-                        ? 'bg-teal-primary/5 border-teal-primary text-teal-primary shadow-lg shadow-teal-primary/5' 
+                        ? 'bg-white border-teal-primary text-teal-primary shadow-lg shadow-teal-primary/10' 
                         : 'bg-bg-light border-transparent text-dark-text focus:border-teal-primary focus:bg-white'
                     }`}
                   />
@@ -372,11 +679,11 @@ export default function Login({ onLogin }: LoginProps) {
                   whileTap={{ scale: 0.98 }}
                   onClick={verifyOtp} 
                   disabled={loading} 
-                  className="w-full h-[56px] teal-gradient text-white font-black rounded-2xl shadow-xl shadow-teal-primary/20 transition-all flex items-center justify-center gap-3"
+                  className="w-full h-[56px] bg-[#008000] text-white font-black rounded-2xl shadow-xl shadow-green-900/10 transition-all flex items-center justify-center gap-3"
                 >
                   {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : (
                     <>
-                      <span>ভেরিফাই করুন</span>
+                      <span>Verify</span>
                       <ShieldCheck className="w-5 h-5" />
                     </>
                   )}
@@ -410,3 +717,5 @@ export default function Login({ onLogin }: LoginProps) {
     </div>
   );
 }
+
+export default memo(Login);

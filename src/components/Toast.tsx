@@ -5,7 +5,7 @@ import React, { useEffect } from 'react';
 interface ToastProps {
   show: boolean;
   message: string;
-  type?: 'success' | 'error';
+  type?: 'success' | 'error' | 'info';
   onClose: () => void;
   duration?: number;
 }
@@ -32,17 +32,23 @@ export default function Toast({ show, message, type = 'success', onClose, durati
           <div className={`p-4 rounded-2xl shadow-2xl flex items-center gap-3 border ${
             type === 'success' 
               ? 'bg-white border-teal-primary/20 text-dark-text' 
+              : type === 'info'
+              ? 'bg-white border-blue-500/20 text-dark-text'
               : 'bg-white border-danger-red/20 text-dark-text'
           }`}>
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-              type === 'success' ? 'bg-teal-primary/10 text-teal-primary' : 'bg-danger-red/10 text-danger-red'
+              type === 'success' ? 'bg-teal-primary/10 text-teal-primary' : 
+              type === 'info' ? 'bg-blue-500/10 text-blue-500' :
+              'bg-danger-red/10 text-danger-red'
             }`}>
-              {type === 'success' ? <CheckCircle2 className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
+              {type === 'success' ? <CheckCircle2 className="w-6 h-6" /> : 
+               type === 'info' ? <AlertCircle className="w-6 h-6" /> :
+               <AlertCircle className="w-6 h-6" />}
             </div>
             
             <div className="flex-1 min-w-0">
               <p className="text-xs font-black uppercase tracking-widest text-gray-text mb-0.5">
-                {type === 'success' ? 'সফল হয়েছে' : 'ত্রুটি'}
+                {type === 'success' ? 'সফল হয়েছে' : type === 'info' ? 'তথ্য' : 'ত্রুটি'}
               </p>
               <p className="text-sm font-bold truncate">{message}</p>
             </div>

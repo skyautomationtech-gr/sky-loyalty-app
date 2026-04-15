@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, orderBy, limit, where, updateDoc } from 'firebase/firestore';
 import { UserPlus, User, Phone, MapPin, Sparkles, ArrowRight, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
 import Toast from './Toast';
@@ -9,7 +9,7 @@ interface AddCustomerProps {
   onSuccess?: () => void;
 }
 
-export default function AddCustomer({ onSuccess }: AddCustomerProps) {
+function AddCustomer({ onSuccess }: AddCustomerProps) {
   const [loading, setLoading] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
@@ -18,6 +18,7 @@ export default function AddCustomer({ onSuccess }: AddCustomerProps) {
     name: '',
     phone: '',
     address: '',
+    referralCode: '',
   });
 
   const generateCustomerId = async () => {
@@ -39,22 +40,63 @@ export default function AddCustomer({ onSuccess }: AddCustomerProps) {
     }
   };
 
+  const generateReferralCode = async (): Promise<string> => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 4; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    const referralCode = `SAT-${code}`;
+
+    // Check uniqueness
+    const q = query(collection(db, 'customers'), where('referralCode', '==', referralCode));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return generateReferralCode(); // Retry if not unique
+    }
+    return referralCode;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     
     try {
       const customerId = await generateCustomerId();
+      const referralCode = await generateReferralCode();
       const newCustomer = {
         ...formData,
         customerId,
-        points: 0,
+        referralCode,
+        points: formData.referralCode ? 2 : 0, // 2 points only if referred, 0 otherwise
         tier: 'BRONZE',
         joinedAt: new Date().toISOString(),
         lastVisit: new Date().toISOString(),
+        referralId: formData.referralCode || null,
       };
       
       await addDoc(collection(db, 'customers'), newCustomer);
+      
+      // If referred, add 2 bonus points to referrer
+      if (formData.referralCode) {
+        const q = query(collection(db, 'customers'), where('referralCode', '==', formData.referralCode));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const referrerDoc = snap.docs[0];
+          await updateDoc(referrerDoc.ref, {
+            points: referrerDoc.data().points + 2
+          });
+          await addDoc(collection(db, 'transactions'), {
+            customerId: referrerDoc.id, // Use document ID for transaction
+            type: 'ADD',
+            amount: 2,
+            pointsAfter: referrerDoc.data().points + 2,
+            description: `রেফারেল বোনাস: ${customerId}`,
+            timestamp: new Date().toISOString(),
+            staffId: 'system'
+          });
+        }
+      }
       
       await addDoc(collection(db, 'notifications'), {
         message: `নতুন কাস্টমার ${formData.name} যোগ করা হয়েছে (${customerId})`,
@@ -142,6 +184,19 @@ export default function AddCustomer({ onSuccess }: AddCustomerProps) {
             </div>
           </div>
 
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-gray-text uppercase tracking-widest ml-1">রেফারেল কোড (ঐচ্ছিক)</label>
+            <div className="relative group">
+              <Sparkles className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-text group-focus-within:text-teal-primary transition-colors" />
+              <input 
+                value={formData.referralCode || ''}
+                onChange={(e) => setFormData({ ...formData, referralCode: e.target.value })}
+                placeholder="রেফারেল কোড লিখুন"
+                className="w-full h-14 bg-bg-light rounded-2xl pl-12 pr-5 text-dark-text font-bold text-sm focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10" 
+              />
+            </div>
+          </div>
+
           <motion.button 
             whileTap={{ scale: 0.98 }}
             type="submit" 
@@ -186,3 +241,5 @@ export default function AddCustomer({ onSuccess }: AddCustomerProps) {
     </div>
   );
 }
+
+export default memo(AddCustomer);

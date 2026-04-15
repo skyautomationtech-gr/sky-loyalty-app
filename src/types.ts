@@ -3,8 +3,29 @@ export type Tier = 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM';
 export type TransactionType = 'ADD' | 'REDEEM';
 export type NotificationType = 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR';
 
+export interface Branch {
+  id: string;
+  name: string;
+  location: string;
+  phone: string;
+  managerId: string;
+  status: 'active' | 'inactive';
+  createdAt: string;
+}
+
+export interface Reward {
+  id: string;
+  name: string;
+  description: string;
+  pointsRequired: number;
+  image?: string;
+  status: 'active' | 'inactive';
+  category: string;
+}
+
 export interface Staff {
   id: string;
+  uid?: string;
   name: string;
   email: string;
   password?: string;
@@ -13,11 +34,13 @@ export interface Staff {
   addedBy: string;
   addedDate: string;
   status: 'active' | 'inactive';
+  branchId?: string; // Multi-branch support
 }
 
 export interface Customer {
   id: string;
   customerId: string;
+  referralCode: string; // Unique referral code like SAT-ABCD
   name: string;
   email: string;
   phone: string;
@@ -27,6 +50,8 @@ export interface Customer {
   tier: Tier;
   joinedAt: string;
   lastVisit: string;
+  branchId?: string; // Multi-branch support
+  referralId?: string; // ID of the customer who referred this customer
 }
 
 export interface Transaction {
@@ -38,6 +63,8 @@ export interface Transaction {
   description: string;
   timestamp: string;
   staffId: string;
+  branchId?: string; // Multi-branch support
+  rewardId?: string; // If it was a redemption
 }
 
 export interface LoyaltyRule {

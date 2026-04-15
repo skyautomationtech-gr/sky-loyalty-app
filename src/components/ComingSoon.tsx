@@ -8,7 +8,7 @@ interface ComingSoonProps {
 
 export default function ComingSoon({ onBack, featureName }: ComingSoonProps) {
   return (
-    <div className="space-y-6 pb-20 -mx-6 -mt-[50px] pt-12 px-6 bg-[#F8FFFE] min-h-screen">
+    <div className="space-y-6 pb-20 -mx-6 -mt-[50px] pt-12 px-6 bg-white min-h-screen">
       {/* Header */}
       <header className="flex items-center gap-3 py-2">
         <button onClick={onBack} className="p-2 -ml-2 text-gray-text hover:text-teal-primary transition-colors">

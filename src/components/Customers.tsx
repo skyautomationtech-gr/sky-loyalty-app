@@ -1,34 +1,126 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import { Customer, Staff, Transaction } from '../types';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, addDoc, updateDoc, doc, deleteDoc, query, where, onSnapshot, orderBy } from 'firebase/firestore';
-import { Search, Plus, Phone, MapPin, Zap, ShoppingBag, History, Edit2, Trash2, X, Download, Users, ChevronRight, MessageSquare, RefreshCw, ArrowUpRight, Sparkles, UserCheck, Share2 } from 'lucide-react';
+import { Search, Plus, Phone, MapPin, Zap, ShoppingBag, History, Edit2, Trash2, X, Download, Users, ChevronRight, MessageSquare, RefreshCw, ArrowUpRight, Sparkles, UserCheck, Share2, Crown, Shield, ArrowDown, ArrowUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import CustomerCard from './CustomerCard';
+import { QRCodeSVG } from 'qrcode.react';
 import html2canvas from 'html2canvas';
 import ConfirmationModal from './ConfirmationModal';
 import Toast from './Toast';
 
+const CustomerListItem = memo(({ customer, onClick, index, isAdmin }: { customer: Customer, onClick: (c: Customer) => void, index: number, isAdmin: boolean }) => {
+  const daysSinceVisit = customer.lastVisit ? Math.floor((new Date().getTime() - new Date(customer.lastVisit).getTime()) / (1000 * 60 * 60 * 24)) : null;
+
+  return (
+  <div
+    onClick={() => onClick(customer)}
+    className="bg-white border border-bg-light rounded-[2rem] p-4 flex justify-between items-center shadow-sm active:scale-[0.98] transition-all cursor-pointer group hover:border-teal-primary/20 will-change-transform"
+  >
+    <div className="flex items-center gap-4">
+      <div className="w-12 h-12 rounded-2xl bg-teal-primary/10 flex items-center justify-center font-black text-teal-primary text-lg border-2 border-white shadow-sm group-hover:scale-110 transition-transform relative">
+        {customer.name.charAt(0)}
+        {/* Activity Dot based on last visit */}
+        {daysSinceVisit !== null && (
+          <div className={`absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white ${
+            daysSinceVisit <= 7 ? 'bg-green-500' : 
+            daysSinceVisit > 30 ? 'bg-danger-red' : 'bg-yellow-500'
+          }`} title={daysSinceVisit === 0 ? 'Visited today' : `Visited ${daysSinceVisit} days ago`} />
+        )}
+      </div>
+      <div className="min-w-0">
+        <h3 className="text-sm font-black text-dark-text truncate max-w-[150px]">{customer.name}</h3>
+        <div className="flex items-center gap-2 mt-0.5">
+          <p className="text-[10px] text-gray-text font-black uppercase tracking-widest">
+            {isAdmin ? customer.phone : `${customer.phone.substring(0, 3)}****${customer.phone.substring(customer.phone.length - 2)}`}
+          </p>
+          {daysSinceVisit !== null && (
+            <span className="text-[8px] text-gray-text/60 font-bold">
+              • {daysSinceVisit === 0 ? 'Today' : `${daysSinceVisit}d ago`}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+    <div className="flex items-center gap-4">
+      <div className="text-right flex flex-col items-end gap-1">
+        <p className="text-lg font-black text-teal-primary leading-none">{customer.points.toLocaleString()}</p>
+        <div className={`flex items-center gap-1 text-[8px] font-black px-2 py-0.5 rounded-full border ${
+          customer.tier === 'PLATINUM' ? 'bg-teal-primary/10 border-teal-primary text-teal-primary' :
+          customer.tier === 'GOLD' ? 'bg-yellow-50 border-yellow-500 text-yellow-600' :
+          customer.tier === 'SILVER' ? 'bg-slate-50 border-slate-400 text-slate-500' :
+          'bg-orange-50 border-orange-600 text-orange-600'
+        }`}>
+          {customer.tier === 'PLATINUM' && <Crown className="w-2.5 h-2.5" />}
+          {customer.tier === 'GOLD' && <Sparkles className="w-2.5 h-2.5" />}
+          {customer.tier === 'SILVER' && <Shield className="w-2.5 h-2.5" />}
+          {customer.tier === 'BRONZE' && <UserCheck className="w-2.5 h-2.5" />}
+          <span>{customer.tier}</span>
+        </div>
+      </div>
+      <ChevronRight className="w-5 h-5 text-gray-text opacity-30 group-hover:opacity-100 transition-opacity" />
+    </div>
+  </div>
+)});
+
+CustomerListItem.displayName = 'CustomerListItem';
+
 interface CustomersProps {
   user: Staff | null;
   customers: Customer[];
+  initialSelectedId?: string | null;
+  onClearInitialId?: () => void;
 }
 
-export default function Customers({ user, customers }: CustomersProps) {
+type SortOption = 'name' | 'points' | 'lastVisit';
+
+function Customers({ user, customers, initialSelectedId, onClearInitialId }: CustomersProps) {
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState<SortOption>('lastVisit');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+
+  useEffect(() => {
+    if (initialSelectedId) {
+      const customer = customers.find(c => c.customerId === initialSelectedId);
+      if (customer) {
+        setSelectedCustomer(customer);
+        if (onClearInitialId) onClearInitialId();
+      }
+    }
+  }, [initialSelectedId, customers, onClearInitialId]);
+
+  const handleCustomerClick = useCallback((customer: Customer) => {
+    setSelectedCustomer(customer);
+  }, []);
 
   const filteredCustomers = useMemo(() => {
     const s = search.toLowerCase();
-    return customers.filter(m => 
+    let result = customers.filter(m => 
       m.name.toLowerCase().includes(s) ||
       m.phone.includes(s) ||
       m.customerId.toLowerCase().includes(s)
     );
-  }, [customers, search]);
+
+    result.sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === 'name') {
+        comparison = a.name.localeCompare(b.name);
+      } else if (sortBy === 'points') {
+        comparison = a.points - b.points;
+      } else if (sortBy === 'lastVisit') {
+        const dateA = a.lastVisit ? new Date(a.lastVisit).getTime() : 0;
+        const dateB = b.lastVisit ? new Date(b.lastVisit).getTime() : 0;
+        comparison = dateA - dateB;
+      }
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [customers, search, sortBy, sortOrder]);
 
   return (
-    <div className="space-y-6 pb-24 bg-[#F8FFFE]">
+    <div className="space-y-6 pb-24 bg-white">
       {/* Header */}
       <header className="flex justify-between items-center bg-white py-2">
         <div className="flex items-center gap-3">
@@ -39,53 +131,58 @@ export default function Customers({ user, customers }: CustomersProps) {
         </div>
       </header>
 
-      {/* Search Bar */}
-      <div className="relative group">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-text group-focus-within:text-teal-primary transition-colors" />
-        <input
-          type="text"
-          placeholder="নাম, ফোন বা আইডি দিয়ে খুঁজুন..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full bg-bg-light rounded-2xl py-4 pl-12 pr-4 text-dark-text font-bold text-sm focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10"
-        />
+      {/* Search & Sort Bar */}
+      <div className="flex flex-col gap-3">
+        <div className="relative group">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-text group-focus-within:text-teal-primary transition-colors" />
+          <input
+            type="text"
+            placeholder="নাম, ফোন বা আইডি দিয়ে খুঁজুন..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-bg-light rounded-2xl py-4 pl-12 pr-4 text-dark-text font-bold text-sm focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex-1 flex items-center bg-bg-light rounded-2xl p-1 border border-bg-light">
+            <button
+              onClick={() => setSortBy('name')}
+              className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all ${sortBy === 'name' ? 'bg-white text-teal-primary shadow-sm' : 'text-gray-text'}`}
+            >
+              নাম
+            </button>
+            <button
+              onClick={() => setSortBy('points')}
+              className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all ${sortBy === 'points' ? 'bg-white text-teal-primary shadow-sm' : 'text-gray-text'}`}
+            >
+              পয়েন্ট
+            </button>
+            <button
+              onClick={() => setSortBy('lastVisit')}
+              className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all ${sortBy === 'lastVisit' ? 'bg-white text-teal-primary shadow-sm' : 'text-gray-text'}`}
+            >
+              ভিজিট
+            </button>
+          </div>
+          <button
+            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+            className="w-10 h-10 bg-bg-light rounded-2xl flex items-center justify-center text-gray-text hover:text-teal-primary transition-colors border border-bg-light"
+          >
+            {sortOrder === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+          </button>
+        </div>
       </div>
 
       {/* Customer List */}
       <div className="space-y-3">
         {filteredCustomers.map((customer, idx) => (
-          <motion.div
-            key={customer.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: Math.min(idx * 0.02, 0.3) }}
-            onClick={() => setSelectedCustomer(customer)}
-            className="bg-white border border-bg-light rounded-[2rem] p-4 flex justify-between items-center shadow-sm active:scale-[0.98] transition-all cursor-pointer group hover:border-teal-primary/20 will-change-transform"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-teal-primary/10 flex items-center justify-center font-black text-teal-primary text-lg border-2 border-white shadow-sm group-hover:scale-110 transition-transform">
-                {customer.name.charAt(0)}
-              </div>
-              <div className="min-w-0">
-                <h3 className="text-sm font-black text-dark-text truncate max-w-[150px]">{customer.name}</h3>
-                <p className="text-[10px] text-gray-text font-black uppercase tracking-widest">{customer.phone}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right flex flex-col items-end gap-1">
-                <p className="text-lg font-black text-teal-primary leading-none">{customer.points.toLocaleString()}</p>
-                <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border ${
-                  customer.tier === 'PLATINUM' ? 'bg-teal-primary/10 border-teal-primary text-teal-primary' :
-                  customer.tier === 'GOLD' ? 'bg-yellow-50 border-yellow-500 text-yellow-600' :
-                  customer.tier === 'SILVER' ? 'bg-slate-50 border-slate-400 text-slate-500' :
-                  'bg-orange-50 border-orange-600 text-orange-600'
-                }`}>
-                  {customer.tier}
-                </span>
-              </div>
-              <ChevronRight className="w-5 h-5 text-gray-text opacity-30 group-hover:opacity-100 transition-opacity" />
-            </div>
-          </motion.div>
+          <CustomerListItem 
+            key={customer.id} 
+            customer={customer} 
+            index={idx} 
+            onClick={handleCustomerClick} 
+            isAdmin={user?.role === 'Admin' || user?.role === 'Master Admin'}
+          />
         ))}
         {filteredCustomers.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
@@ -121,6 +218,7 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
   const [isEditMode, setIsEditMode] = useState(false);
   const [editData, setEditData] = useState({
     name: customer.name,
@@ -310,21 +408,15 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
         return;
       }
       
-      // Improved html2canvas settings for better rendering on mobile
+      // Use a small delay to ensure rendering is complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       const canvas = await html2canvas(cardElement, {
-        scale: 2,
+        scale: 3, // Increased scale for better quality
         useCORS: true,
         allowTaint: true,
-        logging: false,
-        backgroundColor: '#000000',
-        windowWidth: 400, // Fixed width for consistent rendering
-        onclone: (clonedDoc) => {
-          const el = clonedDoc.getElementById('member-card');
-          if (el) {
-            el.style.transform = 'none';
-            el.style.borderRadius = '0';
-          }
-        }
+        backgroundColor: '#000000', // Explicitly set to black to avoid oklch issues
+        logging: false
       });
       
       const dataUrl = canvas.toDataURL('image/png', 1.0);
@@ -333,6 +425,7 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
       setIsDownloading(false);
       
     } catch (error: any) {
+      console.error("Download error:", error);
       setToastMsg('ত্রুটি: ' + error.message);
       setToastType('error');
       setShowToast(true);
@@ -343,16 +436,8 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
   const handleSharePreview = async () => {
     if (!previewImage) return;
     try {
-      // Convert DataURL to Blob manually for better compatibility
-      const parts = previewImage.split(';base64,');
-      const contentType = parts[0].split(':')[1];
-      const raw = window.atob(parts[1]);
-      const rawLength = raw.length;
-      const uInt8Array = new Uint8Array(rawLength);
-      for (let i = 0; i < rawLength; ++i) {
-        uInt8Array[i] = raw.charCodeAt(i);
-      }
-      const blob = new Blob([uInt8Array], { type: contentType });
+      const response = await fetch(previewImage);
+      const blob = await response.blob();
       const file = new File([blob], `SKY-${customer.customerId}.png`, { type: 'image/png' });
 
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -362,216 +447,277 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
           text: `Customer: ${customer.name} (${customer.customerId})`
         });
       } else {
-        // Fallback: Trigger direct download via blob URL
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
         link.download = `SKY-${customer.customerId}.png`;
         document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        setToastMsg('ডাউনলোড শুরু হয়েছে');
-        setShowToast(true);
       }
-    } catch (e) {
-      // Final fallback: Open in new window
-      const link = document.createElement('a');
-      link.href = previewImage;
-      link.download = `SKY-${customer.customerId}.png`;
-      link.click();
+    } catch (error) {
+      console.error("Error sharing:", error);
     }
   };
 
-  const nextTierPoints = customer.tier === 'BRONZE' ? 500 : customer.tier === 'SILVER' ? 1500 : customer.tier === 'GOLD' ? 5000 : 0;
-  const progress = nextTierPoints > 0 ? Math.min((customer.points / nextTierPoints) * 100, 100) : 100;
+return (
+  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95 }} 
+      animate={{ opacity: 1, scale: 1 }} 
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+    >
+      <div className="p-6 pb-2 flex justify-between items-center bg-white border-b border-bg-light">
+        <h2 className="text-lg font-black text-dark-text tracking-tight">কাস্টমার প্রোফাইল</h2>
+        <button onClick={onClose} className="p-2 bg-bg-light rounded-full text-gray-text hover:text-dark-text transition-colors">
+          <X className="w-5 h-5" />
+        </button>
+      </div>
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-dark-text/60 backdrop-blur-sm">
-      <motion.div
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        className="w-full max-w-[430px] h-[92vh] bg-white rounded-t-[3rem] overflow-hidden flex flex-col shadow-2xl"
-      >
-        <div className="p-6 pb-0 flex justify-between items-center">
-          <h2 className="text-xl font-black text-dark-text tracking-tight">কাস্টমার প্রোফাইল</h2>
-          <button onClick={onClose} className="p-2 bg-bg-light rounded-full text-gray-text hover:text-dark-text transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+      <div className="flex-1 overflow-y-auto p-6 scrollbar-hide space-y-8">
+        {/* Member Card - Enhanced */}
+        <div id="member-card" className="rounded-[2rem] p-6 relative overflow-hidden shadow-2xl" style={{ background: 'linear-gradient(135deg, #111827, #000000)', color: '#ffffff' }}>
+          <div className="absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" style={{ backgroundColor: 'rgba(234, 179, 8, 0.2)' }}></div>
+          
+          <div className="relative z-10 flex flex-col justify-between h-full min-h-[160px]">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-2xl font-black tracking-tight">{customer.name}</h3>
+                <p className="text-xs font-bold tracking-widest uppercase mt-1" style={{ color: 'rgba(255, 255, 255, 0.5)' }}>{customer.customerId}</p>
+              </div>
+              <div className={`flex items-center gap-1.5 text-[10px] font-black px-3 py-1 rounded-full border ${
+                customer.tier === 'PLATINUM' ? '' :
+                customer.tier === 'GOLD' ? '' :
+                customer.tier === 'SILVER' ? '' :
+                ''
+              }`} style={
+                customer.tier === 'PLATINUM' ? { backgroundColor: 'rgba(234, 179, 8, 0.2)', borderColor: 'rgba(234, 179, 8, 0.5)', color: '#EAB308' } :
+                customer.tier === 'GOLD' ? { backgroundColor: 'rgba(234, 179, 8, 0.2)', borderColor: 'rgba(234, 179, 8, 0.5)', color: '#facc15' } :
+                customer.tier === 'SILVER' ? { backgroundColor: 'rgba(148, 163, 184, 0.2)', borderColor: 'rgba(148, 163, 184, 0.5)', color: '#cbd5e1' } :
+                { backgroundColor: 'rgba(249, 115, 22, 0.2)', borderColor: 'rgba(249, 115, 22, 0.5)', color: '#fb923c' }
+              }>
+                {customer.tier}
+              </div>
+            </div>
+            
+            <div className="flex justify-between items-end mt-6">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest mb-1" style={{ color: 'rgba(255, 255, 255, 0.5)' }}>মোট পয়েন্ট</p>
+                <p className="text-4xl font-black tracking-tighter" style={{ color: '#EAB308' }}>{customer.points.toLocaleString()}</p>
+              </div>
+              <div className="bg-white p-1 rounded-lg">
+                <QRCodeSVG value={customer.customerId} size={60} />
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar bg-[#F8FFFE]">
-          {/* Luxury Card Section */}
+        {/* Action Buttons */}
+        <div className="grid grid-cols-2 gap-3">
+          <motion.button 
+            whileTap={{ scale: 0.98 }}
+            onClick={handleDownloadCard}
+            disabled={isDownloading}
+            className="h-12 bg-gray-100 text-dark-text rounded-2xl font-black text-xs flex items-center justify-center gap-2 transition-all hover:bg-gray-200"
+          >
+            {isDownloading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            কার্ড
+          </motion.button>
+          <motion.button 
+            whileTap={{ scale: 0.98 }}
+            onClick={() => {
+              let phone = customer.phone.replace(/\D/g, '');
+              if (phone.startsWith('0')) phone = '88' + phone;
+              else if (!phone.startsWith('88')) phone = '88' + phone;
+              window.open(`https://wa.me/${phone}`, '_blank');
+            }}
+            className="h-12 bg-[#25D366] text-white rounded-2xl font-black text-xs flex items-center justify-center gap-2 transition-all hover:bg-[#128C7E]"
+          >
+            <MessageSquare className="w-4 h-4" /> হোয়াটসঅ্যাপ
+          </motion.button>
+        </div>
+
+        {/* Admin Actions */}
+        {(user?.role === 'Admin' || user?.role === 'Master Admin') && (
+          <div className="grid grid-cols-2 gap-3">
+            <motion.button 
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setIsEditMode(true)}
+              className="h-12 bg-blue-50 text-blue-600 rounded-2xl font-black text-xs flex items-center justify-center gap-2 transition-all hover:bg-blue-100"
+            >
+              <Edit2 className="w-4 h-4" /> এডিট
+            </motion.button>
+            <motion.button 
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="h-12 bg-red-50 text-red-600 rounded-2xl font-black text-xs flex items-center justify-center gap-2 transition-all hover:bg-red-100"
+            >
+              <Trash2 className="w-4 h-4" /> ডিলিট
+            </motion.button>
+          </div>
+        )}
+
+        {/* Info Section - Clean Grid */}
+        <section className="bg-white border border-gray-100 rounded-[2rem] p-6 space-y-4 shadow-sm">
+          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">ব্যক্তিগত তথ্য</h3>
+          {isEditMode ? (
+            <div className="space-y-3">
+              <input 
+                type="text" 
+                value={editData.name} 
+                onChange={(e) => setEditData({...editData, name: e.target.value})}
+                className="w-full bg-gray-50 p-4 rounded-2xl text-sm font-bold text-dark-text"
+                placeholder="নাম"
+              />
+              <input 
+                type="text" 
+                value={editData.phone} 
+                onChange={(e) => setEditData({...editData, phone: e.target.value})}
+                className="w-full bg-gray-50 p-4 rounded-2xl text-sm font-bold text-dark-text"
+                placeholder="ফোন"
+              />
+              <input 
+                type="text" 
+                value={editData.address} 
+                onChange={(e) => setEditData({...editData, address: e.target.value})}
+                className="w-full bg-gray-50 p-4 rounded-2xl text-sm font-bold text-dark-text"
+                placeholder="ঠিকানা"
+              />
+              <div className="flex gap-2">
+                <button onClick={handleUpdateCustomer} className="flex-1 h-12 bg-teal-primary text-white rounded-2xl font-black text-xs">সেভ করুন</button>
+                <button onClick={() => setIsEditMode(false)} className="flex-1 h-12 bg-gray-100 text-gray-600 rounded-2xl font-black text-xs">বাতিল</button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl">
+                <p className="text-[10px] text-gray-500 font-bold uppercase">ফোন</p>
+                <p className="text-sm text-dark-text font-black">
+                  {user?.role === 'Admin' || user?.role === 'Master Admin' ? customer.phone : `${customer.phone.substring(0, 3)}****${customer.phone.substring(customer.phone.length - 2)}`}
+                </p>
+              </div>
+              <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl">
+                <p className="text-[10px] text-gray-500 font-bold uppercase">রেফারেল কোড</p>
+                <p className="text-sm text-dark-text font-black">{customer.referralCode || 'N/A'}</p>
+              </div>
+              <div className="flex justify-between items-center bg-gray-50 p-4 rounded-2xl">
+                <p className="text-[10px] text-gray-500 font-bold uppercase">রেফারেল আইডি</p>
+                <p className="text-sm text-dark-text font-black">{customer.referralId || 'N/A'}</p>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Points Management */}
+        <section className="bg-white border border-bg-light rounded-[2.5rem] p-6 space-y-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[10px] font-black text-gray-text uppercase tracking-widest">পয়েন্ট ম্যানেজমেন্ট</h3>
+          </div>
+          
           <div className="space-y-4">
-            <CustomerCard customer={customer} id="member-card" />
-            {(user?.role === 'Admin' || user?.role === 'Master Admin') && (
-              <motion.button 
-                whileTap={{ scale: 0.98 }}
-                onClick={handleDownloadCard}
-                disabled={isDownloading}
-                className="w-full py-4 bg-[#0D0D0D] text-[#C9A84C] rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 transition-all border border-[#C9A84C]/20"
+            <div className="flex p-1 bg-bg-light rounded-2xl">
+              <button
+                onClick={() => setAddMode('AMOUNT')}
+                className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all ${addMode === 'AMOUNT' ? 'bg-white text-teal-primary shadow-sm' : 'text-gray-text'}`}
               >
-                {isDownloading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                {isDownloading ? 'প্রস্তুত হচ্ছে...' : 'কার্ড ডাউনলোড করুন'}
-              </motion.button>
-            )}
-          </div>
-
-          {/* Points & Tier Progress */}
-          <div className="bg-bg-light rounded-[2.5rem] p-8 space-y-6 border border-bg-light relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-teal-primary/5 rounded-full -mr-16 -mt-16 blur-3xl" />
-            
-            <div className="flex justify-between items-end relative z-10">
-              <div>
-                <p className="text-4xl font-black text-dark-text tracking-tighter">{customer.points.toLocaleString()}</p>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-text mt-1">মোট পয়েন্ট</p>
-              </div>
-              <div className="text-right">
-                <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg border ${
-                  customer.tier === 'PLATINUM' ? 'bg-teal-primary text-white border-teal-primary shadow-teal-primary/20' :
-                  customer.tier === 'GOLD' ? 'bg-yellow-500 text-white border-yellow-500 shadow-yellow-500/20' :
-                  customer.tier === 'SILVER' ? 'bg-slate-400 text-white border-slate-400 shadow-slate-400/20' :
-                  'bg-orange-600 text-white border-orange-600 shadow-orange-600/20'
-                }`}>
-                  {customer.tier}
-                </span>
-              </div>
+                টাকার পরিমাণ
+              </button>
+              <button
+                onClick={() => setAddMode('DIRECT')}
+                className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all ${addMode === 'DIRECT' ? 'bg-white text-teal-primary shadow-sm' : 'text-gray-text'}`}
+              >
+                সরাসরি পয়েন্ট
+              </button>
             </div>
-            
-            {nextTierPoints > 0 && (
-              <div className="space-y-3 relative z-10">
-                <div className="flex justify-between text-[9px] font-black uppercase tracking-widest text-gray-text">
-                  <span>পরবর্তী টিয়ার প্রগ্রেস</span>
-                  <span>{customer.points} / {nextTierPoints}</span>
-                </div>
-                <div className="h-2 bg-white rounded-full overflow-hidden border border-bg-light">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progress}%` }}
-                    transition={{ duration: 1, ease: "easeOut" }}
-                    className="h-full bg-teal-primary rounded-full shadow-[0_0_10px_rgba(0,191,166,0.3)]"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* Points Management */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-dark-text ml-1">
-              <Zap className="w-4 h-4 text-teal-primary" />
-              <h3 className="text-[10px] font-black uppercase tracking-widest">পয়েন্ট ম্যানেজমেন্ট</h3>
-            </div>
-            
-            <div className="bg-white border border-bg-light rounded-[2.5rem] p-6 space-y-6 shadow-sm">
-              <div className="flex bg-bg-light rounded-2xl p-1.5 border border-bg-light">
-                <button 
-                  onClick={() => setAddMode('AMOUNT')}
-                  className={`flex-1 py-2.5 text-[10px] font-black rounded-xl transition-all ${addMode === 'AMOUNT' ? 'bg-white text-teal-primary shadow-sm' : 'text-gray-text'}`}
-                >
-                  টাকা থেকে পয়েন্ট
-                </button>
-                <button 
-                  onClick={() => setAddMode('DIRECT')}
-                  className={`flex-1 py-2.5 text-[10px] font-black rounded-xl transition-all ${addMode === 'DIRECT' ? 'bg-white text-teal-primary shadow-sm' : 'text-gray-text'}`}
-                >
-                  সরাসরি পয়েন্ট
-                </button>
-              </div>
-
-              {addMode === 'AMOUNT' ? (
-                <div className="space-y-4">
-                  <div className="relative group">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-text font-black group-focus-within:text-teal-primary transition-colors">৳</span>
-                    <input 
-                      type="number" 
-                      placeholder="ক্রয়কৃত টাকার পরিমাণ লিখুন"
-                      value={purchaseAmount}
-                      onChange={(e) => setPurchaseAmount(e.target.value)}
-                      className="w-full bg-bg-light rounded-2xl p-4 pl-8 text-dark-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10"
-                    />
-                  </div>
-                  {calculatedPoints > 0 && (
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-teal-primary/5 border border-teal-primary/10 rounded-2xl p-4 text-center">
-                      <p className="text-[10px] font-black text-teal-primary uppercase tracking-widest flex items-center justify-center gap-2">
-                        <Sparkles className="w-3 h-3" /> আপনি <span className="text-xl">{calculatedPoints}</span> পয়েন্ট পাবেন
-                      </p>
-                    </motion.div>
-                  )}
-                  <motion.button 
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handlePoints('ADD', calculatedPoints)}
-                    disabled={calculatedPoints <= 0 || loading}
-                    className="w-full h-14 teal-gradient text-white text-xs font-black rounded-2xl shadow-xl shadow-teal-primary/20 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-                  >
-                    {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Plus className="w-4 h-4" />}
-                    পয়েন্ট যোগ করুন
-                  </motion.button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="relative group">
-                    <Zap className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-text group-focus-within:text-teal-primary transition-colors" />
-                    <input 
-                      type="number" 
-                      placeholder="পয়েন্টের সংখ্যা লিখুন"
-                      value={pointsInput}
-                      onChange={(e) => setPointsInput(e.target.value)}
-                      className="w-full bg-bg-light rounded-2xl p-4 pl-12 text-dark-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10"
-                    />
-                  </div>
-                  <motion.button 
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handlePoints('ADD')}
-                    disabled={!pointsInput || loading}
-                    className="w-full h-14 teal-gradient text-white text-xs font-black rounded-2xl shadow-xl shadow-teal-primary/20 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-                  >
-                    {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Plus className="w-4 h-4" />}
-                    সরাসরি যোগ করুন
-                  </motion.button>
-                </div>
-              )}
-
-              <div className="pt-6 border-t border-bg-light space-y-4">
+            {addMode === 'AMOUNT' ? (
+              <div className="space-y-3">
                 <div className="relative group">
-                  <ShoppingBag className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-text group-focus-within:text-orange-500 transition-colors" />
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-text font-black group-focus-within:text-teal-primary transition-colors">৳</span>
                   <input 
                     type="number" 
-                    placeholder="রিডিম করার পয়েন্ট সংখ্যা"
-                    value={redeemInput}
-                    onChange={(e) => setRedeemInput(e.target.value)}
-                    className="w-full bg-bg-light rounded-2xl p-4 pl-12 text-dark-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all border-2 border-transparent focus:border-orange-500/10"
+                    placeholder="কেনার পরিমাণ (টাকা)"
+                    value={purchaseAmount}
+                    onChange={(e) => setPurchaseAmount(e.target.value)}
+                    className="w-full bg-bg-light rounded-2xl p-4 pl-10 text-dark-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10"
+                  />
+                </div>
+                {purchaseAmount && (
+                  <p className="text-[10px] text-teal-primary font-black text-center bg-teal-primary/5 py-2 rounded-xl">
+                    পাবেন: {calculatedPoints} পয়েন্ট
+                  </p>
+                )}
+                <motion.button 
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handlePoints('ADD', calculatedPoints)}
+                  disabled={!purchaseAmount || calculatedPoints <= 0 || loading}
+                  className="w-full h-14 teal-gradient text-white text-xs font-black rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-teal-primary/20"
+                >
+                  {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  পয়েন্ট যোগ করুন
+                </motion.button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="relative group">
+                  <Zap className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-text group-focus-within:text-teal-primary transition-colors" />
+                  <input 
+                    type="number" 
+                    placeholder="যোগ করার পয়েন্ট সংখ্যা"
+                    value={pointsInput}
+                    onChange={(e) => setPointsInput(e.target.value)}
+                    className="w-full bg-bg-light rounded-2xl p-4 pl-12 text-dark-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10"
                   />
                 </div>
                 <motion.button 
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => handlePoints('REDEEM')}
-                  disabled={!redeemInput || loading}
-                  className="w-full h-14 bg-white border-2 border-orange-500 text-orange-500 text-xs font-black rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  onClick={() => handlePoints('ADD')}
+                  disabled={!pointsInput || loading}
+                  className="w-full h-14 teal-gradient text-white text-xs font-black rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-teal-primary/20"
                 >
-                  {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <ArrowUpRight className="w-4 h-4" />}
-                  পয়েন্ট রিডিম করুন
+                  {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  পয়েন্ট যোগ করুন
                 </motion.button>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Transaction History */}
-          <section className="space-y-4">
-            <div className="flex items-center gap-2 text-dark-text ml-1">
-              <History className="w-4 h-4 text-teal-primary" />
-              <h3 className="text-[10px] font-black uppercase tracking-widest">লেনদেনের ইতিহাস</h3>
+          <div className="pt-6 border-t border-bg-light space-y-4">
+            <div className="relative group">
+              <ShoppingBag className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-text group-focus-within:text-orange-500 transition-colors" />
+              <input 
+                type="number" 
+                placeholder="রিডিম করার পয়েন্ট সংখ্যা"
+                value={redeemInput}
+                onChange={(e) => setRedeemInput(e.target.value)}
+                className="w-full bg-bg-light rounded-2xl p-4 pl-12 text-dark-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all border-2 border-transparent focus:border-orange-500/10"
+              />
             </div>
-            <div className="space-y-3">
-              {history.map((tx, idx) => (
-                <motion.div 
-                  key={tx.id} 
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="bg-white border border-bg-light rounded-2xl p-4 flex justify-between items-center shadow-sm"
-                >
+            <motion.button 
+              whileTap={{ scale: 0.98 }}
+              onClick={() => handlePoints('REDEEM')}
+              disabled={!redeemInput || loading}
+              className="w-full h-14 bg-white border-2 border-orange-500 text-orange-500 text-xs font-black rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <ArrowUpRight className="w-4 h-4" />}
+              পয়েন্ট রিডিম করুন
+            </motion.button>
+          </div>
+        </section>
+
+        {/* Transaction History */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2 text-dark-text ml-1">
+            <History className="w-4 h-4 text-teal-primary" />
+            <h3 className="text-[10px] font-black uppercase tracking-widest">লেনদেনের ইতিহাস</h3>
+          </div>
+          <div className="space-y-3">
+            {history.map((tx, idx) => (
+              <div 
+                key={tx.id} 
+                className="bg-white border border-bg-light rounded-2xl p-4 flex flex-col gap-3 shadow-sm"
+              >
+                <div className="flex justify-between items-start">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${tx.type === 'ADD' ? 'bg-teal-primary/10 text-teal-primary' : 'bg-orange-50 text-orange-500'}`}>
                       {tx.type === 'ADD' ? <Plus className="w-5 h-5" /> : <ShoppingBag className="w-5 h-5" />}
@@ -581,129 +727,37 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
                       <p className="text-[9px] text-gray-text font-black uppercase">{new Date(tx.timestamp).toLocaleString('bn-BD')}</p>
                     </div>
                   </div>
-                  <p className={`text-sm font-black ${tx.type === 'ADD' ? 'text-teal-primary' : 'text-orange-500'}`}>
-                    {tx.type === 'ADD' ? '+' : '-'}{tx.amount}
-                  </p>
-                </motion.div>
-              ))}
-              {history.length === 0 && (
-                <div className="bg-bg-light rounded-[2rem] p-10 text-center">
-                  <p className="text-[10px] font-black text-gray-text uppercase tracking-widest">কোনো লেনদেন পাওয়া যায়নি</p>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* Contact Details */}
-          <section className="bg-white border border-bg-light rounded-[2.5rem] p-8 space-y-6 shadow-sm">
-            <h3 className="text-[10px] font-black text-gray-text uppercase tracking-widest">যোগাযোগের তথ্য</h3>
-            <div className="space-y-5">
-              {isEditMode ? (
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black text-gray-text uppercase tracking-widest ml-1">নাম</label>
-                    <input 
-                      type="text"
-                      value={editData.name}
-                      onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                      className="w-full bg-bg-light rounded-2xl p-4 text-dark-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black text-gray-text uppercase tracking-widest ml-1">ফোন নম্বর</label>
-                    <input 
-                      type="text"
-                      value={editData.phone}
-                      onChange={(e) => setEditData({ ...editData, phone: e.target.value })}
-                      className="w-full bg-bg-light rounded-2xl p-4 text-dark-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black text-gray-text uppercase tracking-widest ml-1">ঠিকানা</label>
-                    <textarea 
-                      value={editData.address}
-                      onChange={(e) => setEditData({ ...editData, address: e.target.value })}
-                      rows={2}
-                      className="w-full bg-bg-light rounded-2xl p-4 text-dark-text text-sm font-bold focus:outline-none focus:ring-2 focus:ring-teal-primary/20 transition-all border-2 border-transparent focus:border-teal-primary/10 resize-none"
-                    />
-                  </div>
-                  <div className="flex gap-3 pt-2">
-                    <motion.button 
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleUpdateCustomer}
-                      disabled={loading}
-                      className="flex-1 h-12 teal-gradient text-white rounded-xl font-black text-xs flex items-center justify-center gap-2"
-                    >
-                      {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
-                      সেভ করুন
-                    </motion.button>
-                    <motion.button 
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => {
-                        setIsEditMode(false);
-                        setEditData({ name: customer.name, phone: customer.phone, address: customer.address || '' });
-                      }}
-                      className="flex-1 h-12 bg-bg-light text-gray-text rounded-xl font-black text-xs"
-                    >
-                      বাতিল
-                    </motion.button>
+                  <div className="text-right">
+                    <p className={`text-sm font-black ${tx.type === 'ADD' ? 'text-teal-primary' : 'text-orange-500'}`}>
+                      {tx.type === 'ADD' ? '+' : '-'}{tx.amount}
+                    </p>
+                    <p className="text-[9px] text-gray-text font-bold mt-0.5">ব্যালেন্স: {tx.pointsAfter}</p>
                   </div>
                 </div>
-              ) : (
-                <>
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-bg-light flex items-center justify-center text-teal-primary border border-bg-light"><Phone className="w-5 h-5" /></div>
-                    <div><p className="text-[9px] text-gray-text font-black uppercase tracking-widest">ফোন নম্বর</p><p className="text-sm text-dark-text font-bold">{customer.phone}</p></div>
+                
+                {(tx.description || tx.staffId) && (
+                  <div className="bg-bg-light rounded-xl p-3 flex flex-col gap-1.5">
+                    {tx.description && (
+                      <p className="text-[10px] text-dark-text font-bold">📝 {tx.description}</p>
+                    )}
+                    {tx.staffId && (
+                      <p className="text-[9px] text-gray-text font-black uppercase tracking-widest">
+                        👤 স্টাফ আইডি: {tx.staffId === 'system' ? 'System' : tx.staffId}
+                      </p>
+                    )}
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-bg-light flex items-center justify-center text-teal-primary border border-bg-light"><MapPin className="w-5 h-5" /></div>
-                    <div><p className="text-[9px] text-gray-text font-black uppercase tracking-widest">ঠিকানা</p><p className="text-sm text-dark-text font-bold">{customer.address || 'দেওয়া হয়নি'}</p></div>
-                  </div>
-                  <motion.button 
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => {
-                      let phone = customer.phone.replace(/\D/g, '');
-                      if (phone.startsWith('0')) phone = '88' + phone;
-                      else if (!phone.startsWith('88')) phone = '88' + phone;
-                      const url = `https://wa.me/${phone}`;
-                      const win = window.open(url, '_blank');
-                      if (!win) {
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.target = '_blank';
-                        link.click();
-                      }
-                    }}
-                    className="w-full h-14 bg-[#25D366] text-white rounded-2xl font-black text-xs flex items-center justify-center gap-3 shadow-xl shadow-[#25D366]/20 active:scale-95 transition-all"
-                  >
-                    <MessageSquare className="w-5 h-5" /> হোয়াটসঅ্যাপে মেসেজ দিন
-                  </motion.button>
-                </>
-              )}
-            </div>
-          </section>
-
-          {/* Admin Actions */}
-          {(user?.role === 'Admin' || user?.role === 'Master Admin') && (
-            <div className="flex gap-4 pb-12">
-              <motion.button 
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setIsEditMode(!isEditMode)}
-                className={`flex-1 h-14 rounded-2xl text-xs font-black flex items-center justify-center gap-2 active:scale-95 transition-all ${isEditMode ? 'bg-teal-primary text-white shadow-lg shadow-teal-primary/20' : 'bg-bg-light border border-bg-light text-dark-text'}`}
-              >
-                <Edit2 className="w-4 h-4" /> {isEditMode ? 'এডিট বন্ধ করুন' : 'এডিট করুন'}
-              </motion.button>
-              <motion.button 
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setIsDeleteModalOpen(true)}
-                className="flex-1 h-14 border-2 border-danger-red/10 rounded-2xl text-danger-red text-xs font-black flex items-center justify-center gap-2 active:scale-95 transition-all"
-              >
-                <Trash2 className="w-4 h-4" /> ডিলিট করুন
-              </motion.button>
-            </div>
-          )}
-        </div>
-      </motion.div>
+                )}
+              </div>
+            ))}
+            {history.length === 0 && (
+              <div className="bg-bg-light rounded-[2rem] p-10 text-center">
+                <p className="text-[10px] font-black text-gray-text uppercase tracking-widest">কোনো লেনদেন পাওয়া যায়নি</p>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    </motion.div>
 
       <ConfirmationModal
         isOpen={isDeleteModalOpen}
@@ -780,3 +834,5 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
     </div>
   );
 }
+
+export default memo(Customers);

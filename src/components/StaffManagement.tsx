@@ -280,11 +280,8 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
       {/* Staff List */}
       <div className="space-y-4">
         {displayStaff.map((s, idx) => (
-          <motion.div
+          <div
             key={s.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.05 }}
             className="bg-white border border-bg-light rounded-[2.5rem] p-6 shadow-sm relative overflow-hidden group hover:border-teal-primary/20 transition-all"
           >
             {s.role === 'Master Admin' && (
@@ -365,7 +362,7 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
                 </div>
               )}
             </div>
-          </motion.div>
+          </div>
         ))}
       </div>
 

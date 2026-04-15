@@ -36,7 +36,7 @@ export default class ErrorBoundary extends (React.Component as any) {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-[#F8FFFE] flex flex-col items-center justify-center p-8 text-center">
+        <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center">
           <motion.div 
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}

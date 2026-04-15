@@ -14,7 +14,6 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { 
   getFirestore,
-  enableNetwork,
   doc, 
   getDocFromServer,
   FirestoreError
@@ -24,13 +23,7 @@ import firebaseConfig from '../firebase-applet-config.json';
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-// Initialize Firestore using the standard getFirestore
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-
-// Enable network on app start
-enableNetwork(db)
-  .then(() => console.log('Firebase connected'))
-  .catch(err => console.log('Firebase error:', err));
 
 /**
  * Error Handling Spec for Firestore Operations
