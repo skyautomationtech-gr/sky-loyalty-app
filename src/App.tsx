@@ -29,6 +29,8 @@ import BranchManagement from './components/BranchManagement';
 import BulkImportExport from './components/BulkImportExport';
 import CustomerPortal from './components/CustomerPortal';
 import AuditLogs from './components/AuditLogs';
+import PwaUpdatePrompt from './components/PwaUpdatePrompt';
+import { useInstallPrompt } from './hooks/useInstallPrompt';
 import { useLanguage } from './contexts/LanguageContext';
 import { 
   Home, 
@@ -39,13 +41,15 @@ import {
   Camera,
   User,
   Plus,
-  RefreshCw
+  RefreshCw,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { APP_LOGO, APP_NAME } from './constants';
 
 export default function App() {
   const { t } = useLanguage();
+  const { showInstallPrompt, handleInstall, handleDismiss } = useInstallPrompt();
   const [staffInfo, setStaffInfo] = useState<Staff | null>(() => {
     const saved = localStorage.getItem('sky_tech_session');
     return saved ? JSON.parse(saved) : null;
@@ -602,6 +606,43 @@ export default function App() {
         type={toastType} 
         onClose={() => setShowToast(false)} 
       />
+      <PwaUpdatePrompt />
+      
+      {/* Install Prompt */}
+      <AnimatePresence>
+        {showInstallPrompt && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-20 left-4 right-4 z-[90] bg-white rounded-2xl shadow-2xl border border-teal-primary/20 p-4 flex items-center justify-between gap-4"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-teal-primary/10 rounded-xl flex items-center justify-center">
+                <Download className="w-5 h-5 text-teal-primary" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-dark-text">হোম স্ক্রিনে যোগ করুন</h3>
+                <p className="text-[10px] font-bold text-gray-text">অ্যাপের মতো ব্যবহার করতে</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={handleDismiss}
+                className="px-3 py-2 text-xs font-bold text-gray-text hover:bg-bg-light rounded-lg transition-colors"
+              >
+                পরে
+              </button>
+              <button 
+                onClick={handleInstall}
+                className="px-4 py-2 bg-[#00BFA6] text-white text-xs font-black rounded-lg shadow-md shadow-teal-primary/20"
+              >
+                ইনস্টল
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
     </ErrorBoundary>
   );

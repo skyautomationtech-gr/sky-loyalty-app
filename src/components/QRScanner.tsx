@@ -36,19 +36,40 @@ function QRScanner({ onScan, onClose }: QRScannerProps) {
         }
 
         setHasPermission(null);
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          } 
-        });
+        
+        const requestCamera = async () => {
+          try {
+            const stream = await navigator.mediaDevices
+              .getUserMedia({ 
+                video: { 
+                  facingMode: 'environment',
+                  width: { ideal: 1280 },
+                  height: { ideal: 720 }
+                } 
+              });
+            return stream;
+          } catch (err: any) {
+            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+              alert('ক্যামেরা অনুমতি দিন:\nSettings → Site Settings → Camera → Allow');
+            } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+              alert('ক্যামেরা পাওয়া যাচ্ছে না!');
+            }
+            return null;
+          }
+        };
+
+        const stream = await requestCamera();
+        
+        if (!stream) {
+          setHasPermission(false);
+          return;
+        }
+
         streamRef.current = stream;
         setHasPermission(true);
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          // Explicitly call play to handle browsers that block autoplay
           try {
             await videoRef.current.play();
           } catch (playErr) {
@@ -71,19 +92,6 @@ function QRScanner({ onScan, onClose }: QRScannerProps) {
       } catch (err: any) {
         console.error("Camera error:", err);
         setHasPermission(false);
-        
-        let message = 'ক্যামেরা অনুমতি দিন এবং পেজটি রিফ্রেশ করুন';
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          message = 'ক্যামেরা পারমিশন ব্লক করা আছে। ব্রাউজার সেটিং থেকে এলাউ করুন।';
-        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-          message = 'আপনার ডিভাইসে কোনো ক্যামেরা পাওয়া যায়নি।';
-        } else if (err.message) {
-          message = err.message;
-        }
-        
-        setToastMsg(message);
-        setToastType('error');
-        setShowToast(true);
       }
     };
 
@@ -169,13 +177,12 @@ function QRScanner({ onScan, onClose }: QRScannerProps) {
   if (hasPermission === false) {
     return (
       <div className="fixed inset-0 bg-white z-[60] flex flex-col items-center justify-center p-8 text-center">
-        <div className="w-24 h-24 rounded-[2rem] bg-teal-primary/10 flex items-center justify-center mb-6 border border-teal-primary/10">
-          <Camera className="w-12 h-12 text-teal-primary" />
+        <div className="w-32 h-32 rounded-full bg-teal-primary/10 flex items-center justify-center mb-6">
+          <Camera className="w-16 h-16 text-teal-primary" />
         </div>
-        <h2 className="text-2xl font-black text-dark-text mb-2 tracking-tight">ক্যামেরা অ্যাক্সেস দিন</h2>
+        <h2 className="text-2xl font-black text-dark-text mb-2 tracking-tight">ক্যামেরা অনুমতি দরকার</h2>
         <p className="text-gray-text font-bold mb-8 text-sm leading-relaxed">
-          QR কোড স্ক্যান করার জন্য আপনার ক্যামেরার অনুমতি প্রয়োজন। ব্রাউজার সেটিং থেকে ক্যামেরা পারমিশন এলাউ করুন। <br/>
-          <span className="text-teal-primary text-[10px] mt-2 block">টিপস: যদি কাজ না করে, তবে অ্যাপটি নতুন ট্যাবে ওপেন করুন।</span>
+          QR কোড স্ক্যান করতে ক্যামেরা অ্যাক্সেস দিন
         </p>
         <div className="w-full space-y-3">
           <motion.button 
@@ -184,24 +191,18 @@ function QRScanner({ onScan, onClose }: QRScannerProps) {
               setHasPermission(null);
               setIsScanning(true);
             }}
-            className="w-full h-14 teal-gradient text-white font-black rounded-2xl shadow-xl shadow-teal-primary/20 uppercase tracking-widest"
+            className="w-full h-14 bg-[#00BFA6] text-white font-black rounded-2xl shadow-xl shadow-teal-primary/20 uppercase tracking-widest"
           >
-            আবার চেষ্টা করুন
+            অনুমতি দিন
           </motion.button>
           
-          <motion.button 
-            whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              window.open(window.location.href, '_blank');
-            }}
-            className="w-full h-14 bg-bg-light text-dark-text font-black rounded-2xl border border-bg-light uppercase tracking-widest flex items-center justify-center gap-2"
-          >
-            <ExternalLink className="w-4 h-4" /> নতুন ট্যাবে ওপেন করুন
-          </motion.button>
+          <p className="text-xs text-gray-text mt-4">
+            যদি কাজ না করে: Settings → Site Settings → Camera → Allow
+          </p>
           
           <button 
             onClick={onClose}
-            className="w-full h-14 text-gray-text font-bold text-sm"
+            className="w-full h-14 text-gray-text font-bold text-sm mt-4"
           >
             ফিরে যান
           </button>

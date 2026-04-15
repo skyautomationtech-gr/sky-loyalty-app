@@ -43,9 +43,21 @@ export default function About({ onBack }: AboutProps) {
           <div className="space-y-6 text-left border-t border-bg-light pt-8">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-black text-gray-text uppercase tracking-widest">ভার্সন</span>
-              <span className="text-sm font-black text-dark-text">১.০.০ (স্টেবল)</span>
+              <span className="text-sm font-black text-dark-text">১.১.০ (PWA)</span>
             </div>
-            <div className="flex justify-between items-center">
+            
+            {/* Changelog */}
+            <div className="bg-bg-light p-4 rounded-2xl mt-4">
+              <h3 className="text-[10px] font-black text-gray-text uppercase tracking-widest mb-3">কী কী নতুন এলো (v1.1.0)</h3>
+              <ul className="text-xs font-bold text-dark-text space-y-2 list-disc pl-4">
+                <li>অফলাইন সাপোর্ট ও PWA ইনস্টল সুবিধা</li>
+                <li>অটোমেটিক ব্যাকগ্রাউন্ড আপডেট সিস্টেম</li>
+                <li>ক্যামেরা পারমিশন ও QR স্ক্যানার ফিক্স</li>
+                <li>নেটিভ অ্যাপের মতো জুম ও সিলেকশন বন্ধ</li>
+              </ul>
+            </div>
+
+            <div className="flex justify-between items-center mt-6">
               <span className="text-[10px] font-black text-gray-text uppercase tracking-widest">ডেভেলপার</span>
               <span className="text-sm font-black text-dark-text">Sky Automation Tech</span>
             </div>

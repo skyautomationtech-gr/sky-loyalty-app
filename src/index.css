@@ -19,11 +19,20 @@
   body {
     @apply font-sans bg-white text-dark-text antialiased;
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: pan-y;
     max-width: 430px;
     margin: 0 auto;
     min-height: 100vh;
     position: relative;
     overflow-x: hidden;
+  }
+  
+  input, textarea {
+    -webkit-user-select: auto;
+    user-select: auto;
   }
 }
 
