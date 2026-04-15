@@ -231,6 +231,16 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
     phone: customer.phone,
     address: customer.address || ''
   });
+
+  useEffect(() => {
+    if (!isEditMode) {
+      setEditData({
+        name: customer.name,
+        phone: customer.phone,
+        address: customer.address || ''
+      });
+    }
+  }, [customer, isEditMode]);
   const [loading, setLoading] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
