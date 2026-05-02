@@ -202,12 +202,13 @@ function Customers({ user, customers, initialSelectedId, onClearInitialId }: Cus
       {/* Customer Detail Modal */}
       <AnimatePresence>
         {selectedCustomer && (
-          <CustomerDetailModal 
-            key={selectedCustomer.id}
-            customer={selectedCustomer} 
-            user={user}
-            onClose={() => setSelectedCustomerId(null)} 
-          />
+          <div key={selectedCustomer.id}>
+            <CustomerDetailModal 
+              customer={selectedCustomer} 
+              user={user}
+              onClose={() => setSelectedCustomerId(null)} 
+            />
+          </div>
         )}
       </AnimatePresence>
     </div>
@@ -376,10 +377,11 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
 
     setLoading(true);
     try {
+      const normalizedPhone = editData.phone.replace(/\D/g, '');
       const path = 'customers';
       await updateDoc(doc(db, path, customer.id), {
         name: editData.name,
-        phone: editData.phone,
+        phone: normalizedPhone,
         address: editData.address
       });
       

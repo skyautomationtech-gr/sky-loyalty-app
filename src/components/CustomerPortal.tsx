@@ -28,7 +28,8 @@ function CustomerPortal({ onBack }: { onBack: () => void }) {
     setLoading(true);
     setError(null);
     try {
-      const q = query(collection(db, 'customers'), where('phone', '==', phone));
+      const normalizedPhone = phone.replace(/\D/g, '');
+      const q = query(collection(db, 'customers'), where('phone', '==', normalizedPhone));
       const snap = await getDocs(q);
       if (!snap.empty) {
         setCustomer({ id: snap.docs[0].id, ...snap.docs[0].data() } as Customer);

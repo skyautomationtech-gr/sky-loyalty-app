@@ -64,8 +64,10 @@ function AddCustomer({ onSuccess }: AddCustomerProps) {
     try {
       const customerId = await generateCustomerId();
       const referralCode = await generateReferralCode();
+      const normalizedPhone = formData.phone.replace(/\D/g, '');
       const newCustomer = {
         ...formData,
+        phone: normalizedPhone,
         customerId,
         referralCode,
         points: formData.referralCode ? 2 : 0, // 2 points only if referred, 0 otherwise

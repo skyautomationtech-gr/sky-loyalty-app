@@ -42,7 +42,8 @@ service cloud.firestore {
     // ===============================================================
 
     match /customers/{customerId} {
-      allow read: if isStaff();
+      // Allow public read for the Customer Portal search
+      allow read: if isStaff() || !isAuthenticated();
       allow create, update: if isStaff();
       allow delete: if isMasterAdmin();
     }

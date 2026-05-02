@@ -212,6 +212,7 @@ function QRScanner({ onScan, onClose }: QRScannerProps) {
             whileTap={{ scale: 0.98 }}
             onClick={async () => {
               try {
+                // @ts-ignore
                 await CapacitorApp.openAppSettings();
               } catch (e) {
                 alert('Settings খুলতে সমস্যা হয়েছে। দয়া করে ম্যানুয়ালি Settings থেকে অনুমতি দিন।');
