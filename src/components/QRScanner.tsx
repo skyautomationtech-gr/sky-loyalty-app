@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, memo } from 'react';
-import { BrowserQRCodeReader } from '@zxing/library';
-import { ArrowLeft, Flashlight, Camera, CheckCircle2, Zap, Search, RefreshCw, Sparkles, X, ScanLine, Focus, ExternalLink } from 'lucide-react';
+import { BrowserMultiFormatReader } from '@zxing/browser';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Camera as CapacitorCamera } from '@capacitor/camera';
+import { ArrowLeft, Flashlight, Camera, CheckCircle2, Zap, Search, RefreshCw, Sparkles, X, ScanLine, Focus, ExternalLink, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -15,6 +17,7 @@ interface QRScannerProps {
 function QRScanner({ onScan, onClose }: QRScannerProps) {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [isFlashOn, setIsFlashOn] = useState(false);
+  const [hasFlash, setHasFlash] = useState(false);
   const [scannedCustomer, setScannedCustomer] = useState<Customer | null>(null);
   const [isScanning, setIsScanning] = useState(true);
   const [showFlash, setShowFlash] = useState(false);
@@ -25,73 +28,80 @@ function QRScanner({ onScan, onClose }: QRScannerProps) {
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
   
   const videoRef = useRef<HTMLVideoElement>(null);
-  const codeReaderRef = useRef<BrowserQRCodeReader | null>(null);
+  const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const controlsRef = useRef<any>(null);
 
   useEffect(() => {
+    let active = true;
+
     const startScanner = async () => {
       try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error('ক্যামেরা এই ব্রাউজারে সাপোর্ট করে না');
-        }
-
-        setHasPermission(null);
+        const permission = await CapacitorCamera.requestPermissions({
+          permissions: ['camera']
+        });
         
-        const requestCamera = async () => {
-          try {
-            const stream = await navigator.mediaDevices
-              .getUserMedia({ 
-                video: { 
-                  facingMode: 'environment',
-                  width: { ideal: 1280 },
-                  height: { ideal: 720 }
-                } 
-              });
-            return stream;
-          } catch (err: any) {
-            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-              alert('ক্যামেরা অনুমতি দিন:\nSettings → Site Settings → Camera → Allow');
-            } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-              alert('ক্যামেরা পাওয়া যাচ্ছে না!');
-            }
-            return null;
-          }
-        };
-
-        const stream = await requestCamera();
-        
-        if (!stream) {
-          setHasPermission(false);
+        if (permission.camera !== 'granted') {
+          if (active) setHasPermission(false);
           return;
         }
 
-        streamRef.current = stream;
-        setHasPermission(true);
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { exact: 'environment' },
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 15 }
+          }
+        });
         
+        streamRef.current = stream;
+        if (active) setHasPermission(true);
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          try {
-            await videoRef.current.play();
-          } catch (playErr) {
-            console.warn("Autoplay blocked, user interaction might be needed:", playErr);
-          }
+          await videoRef.current.play();
         }
 
-        const codeReader = new BrowserQRCodeReader();
+        if (!active) return;
+
+        const codeReader = new BrowserMultiFormatReader();
         codeReaderRef.current = codeReader;
 
-        codeReader.decodeFromVideoDevice(
-          undefined, 
+        codeReader.decodeFromVideoElement(
           videoRef.current!, 
-          (result) => {
-            if (result && isScanning) {
+          (result, error, controls) => {
+            controlsRef.current = controls;
+            if (result && isScanning && active) {
               handleSuccessfulScan(result.getText());
             }
           }
         );
       } catch (err: any) {
-        console.error("Camera error:", err);
-        setHasPermission(false);
+        console.error("Scanner startup error:", err);
+        // Fallback for non-environment cam (like on laptop dev)
+        if (err.name === 'OverconstrainedError' || err.name === 'NotFoundError') {
+           try {
+              const fallbackStream = await navigator.mediaDevices.getUserMedia({
+                video: { width: 640, height: 480, frameRate: 15 }
+              });
+              streamRef.current = fallbackStream;
+              if (active) setHasPermission(true);
+              if (videoRef.current) {
+                videoRef.current.srcObject = fallbackStream;
+                await videoRef.current.play();
+              }
+              const codeReader = new BrowserMultiFormatReader();
+              codeReaderRef.current = codeReader;
+              codeReader.decodeFromVideoElement(videoRef.current!, (result) => {
+                if (result && isScanning && active) handleSuccessfulScan(result.getText());
+              });
+           } catch {
+              if (active) setHasPermission(false);
+           }
+        } else {
+           if (active) setHasPermission(false);
+        }
       }
     };
 
@@ -100,11 +110,13 @@ function QRScanner({ onScan, onClose }: QRScannerProps) {
     }
 
     return () => {
-      if (codeReaderRef.current) {
-        codeReaderRef.current.reset();
+      active = false;
+      if (controlsRef.current && typeof controlsRef.current.stop === 'function') {
+        controlsRef.current.stop();
       }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
       }
     };
   }, [isScanning, scannedCustomer]);
@@ -182,7 +194,7 @@ function QRScanner({ onScan, onClose }: QRScannerProps) {
         </div>
         <h2 className="text-2xl font-black text-dark-text mb-2 tracking-tight">ক্যামেরা অনুমতি দরকার</h2>
         <p className="text-gray-text font-bold mb-8 text-sm leading-relaxed">
-          QR কোড স্ক্যান করতে ক্যামেরা অ্যাক্সেস দিন
+          Settings → Apps → Sky Loyalty → Permissions → Camera → Allow করুন
         </p>
         <div className="w-full space-y-3">
           <motion.button 
@@ -193,12 +205,23 @@ function QRScanner({ onScan, onClose }: QRScannerProps) {
             }}
             className="w-full h-14 bg-[#00BFA6] text-white font-black rounded-2xl shadow-xl shadow-teal-primary/20 uppercase tracking-widest"
           >
-            অনুমতি দিন
+            আবার চেষ্টা করুন
           </motion.button>
           
-          <p className="text-xs text-gray-text mt-4">
-            যদি কাজ না করে: Settings → Site Settings → Camera → Allow
-          </p>
+          <motion.button 
+            whileTap={{ scale: 0.98 }}
+            onClick={async () => {
+              try {
+                await CapacitorApp.openAppSettings();
+              } catch (e) {
+                alert('Settings খুলতে সমস্যা হয়েছে। দয়া করে ম্যানুয়ালি Settings থেকে অনুমতি দিন।');
+              }
+            }}
+            className="w-full h-14 bg-bg-light text-dark-text font-black rounded-2xl flex items-center justify-center gap-2 uppercase tracking-widest"
+          >
+            <Settings className="w-5 h-5" />
+            সেটিংস খুলুন
+          </motion.button>
           
           <button 
             onClick={onClose}
@@ -227,30 +250,22 @@ function QRScanner({ onScan, onClose }: QRScannerProps) {
         {/* Cutout using box-shadow */}
         <div className="relative w-[280px] h-[280px] sm:w-[320px] sm:h-[320px] rounded-[3rem] shadow-[0_0_0_9999px_rgba(0,0,0,0.7)] border-2 border-white/10 overflow-hidden">
           
-          {/* Animated Corner Brackets */}
-          <motion.div 
-            animate={{ scale: [1, 1.05, 1] }} 
-            transition={{ duration: 2, repeat: Infinity }} 
-            className="absolute inset-0"
-          >
+          {/* Static Corner Brackets */}
+          <div className="absolute inset-0">
             <div className="absolute top-0 left-0 w-16 h-16 border-t-4 border-l-4 border-teal-primary rounded-tl-[3rem]" />
             <div className="absolute top-0 right-0 w-16 h-16 border-t-4 border-r-4 border-teal-primary rounded-tr-[3rem]" />
             <div className="absolute bottom-0 left-0 w-16 h-16 border-b-4 border-l-4 border-teal-primary rounded-bl-[3rem]" />
             <div className="absolute bottom-0 right-0 w-16 h-16 border-b-4 border-r-4 border-teal-primary rounded-br-[3rem]" />
-          </motion.div>
+          </div>
 
-          {/* Laser Scan Line */}
+          {/* Simple Static Scan Line */}
           {isScanning && (
-            <motion.div 
-              animate={{ top: ['0%', '100%', '0%'] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              className="absolute left-0 right-0 h-[2px] bg-teal-primary shadow-[0_0_20px_4px_rgba(0,191,166,0.6)] z-20"
-            />
+            <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[1px] bg-teal-primary/50 z-20" />
           )}
 
           {/* Center Reticle */}
-          <div className="absolute inset-0 flex items-center justify-center opacity-30">
-            <Focus className="w-16 h-16 text-teal-primary" />
+          <div className="absolute inset-0 flex items-center justify-center opacity-20">
+            <Focus className="w-12 h-12 text-teal-primary" />
           </div>
         </div>
         

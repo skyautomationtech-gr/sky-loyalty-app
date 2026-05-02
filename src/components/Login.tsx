@@ -22,10 +22,10 @@ import {
   Fingerprint
 } from 'lucide-react';
 import { Staff } from '../types';
-import emailjs from '@emailjs/browser';
 import { APP_LOGO, APP_NAME } from '../constants';
 import { logAction } from '../services/auditService';
 import { OperationType, handleFirestoreError } from '../firebase';
+import { sendOtpEmail } from '../services/emailService';
 
 interface LoginProps {
   onLogin: (staff: Staff) => void;
@@ -59,10 +59,6 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    emailjs.init("RoRkAJ90h9lt1nthn");
-  }, []);
-
-  useEffect(() => {
     let interval: any;
     if (resendTimer > 0) {
       interval = setInterval(() => setResendTimer(prev => prev - 1), 1000);
@@ -86,24 +82,11 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
     setFlowType(isReset ? 'RESET' : 'LOGIN');
 
     try {
-      const SERVICE_ID = "service_tps9s6a";
-      const TEMPLATE_ID = "template_0ahal91";
-
-      await emailjs.send(
-        SERVICE_ID,
-        TEMPLATE_ID,
-        {
-          to_email: user.email,
-          passcode: code,
-          time: new Date().toLocaleTimeString(),
-          company_name: APP_NAME,
-          subject: isReset ? "Password Reset Verification" : "Login Verification"
-        }
-      );
+      await sendOtpEmail(user.email, user.name, code);
       setMode('OTP');
-    } catch (err) {
+    } catch (err: any) {
       console.error('EmailJS Error:', err);
-      setError('OTP পাঠাতে ব্যর্থ হয়েছে। আবার চেষ্টা করুন।');
+      setError(err.message || 'OTP পাঠাতে ব্যর্থ হয়েছে। আবার চেষ্টা করুন।');
     } finally {
       setLoading(false);
     }

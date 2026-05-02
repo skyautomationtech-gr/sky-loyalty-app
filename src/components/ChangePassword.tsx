@@ -4,7 +4,7 @@ import { db } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { ArrowLeft, Lock, Eye, EyeOff, CheckCircle2, XCircle, Mail, ShieldCheck, RefreshCw, Sparkles, ShieldAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import emailjs from '@emailjs/browser';
+import { sendOtpEmail } from '../services/emailService';
 import Toast from './Toast';
 
 interface ChangePasswordProps {
@@ -28,10 +28,6 @@ export default function ChangePassword({ user, onBack }: ChangePasswordProps) {
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error'>('success');
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-  useEffect(() => {
-    emailjs.init("RoRkAJ90h9lt1nthn");
-  }, []);
 
   const requirements = [
     { label: 'কমপক্ষে ৮ অক্ষরের হতে হবে', met: newPassword.length >= 8 },
@@ -69,23 +65,14 @@ export default function ChangePassword({ user, onBack }: ChangePasswordProps) {
     setGeneratedOtp(code);
     setIsSaving(true);
     try {
-      await emailjs.send(
-        "service_tps9s6a",
-        "template_0ahal91",
-        {
-          to_email: user.email,
-          passcode: code,
-          time: new Date().toLocaleTimeString(),
-          company_name: "Sky Automation Tech"
-        }
-      );
+      await sendOtpEmail(user.email, user.name, code);
       setShowOtp(true);
       setToastMsg('ভেরিফিকেশন কোড পাঠানো হয়েছে ✅');
       setToastType('success');
       setShowToast(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setToastMsg('ভেরিফিকেশন কোড পাঠাতে সমস্যা হয়েছে');
+      setToastMsg(err.message || 'ভেরিফিকেশন কোড পাঠাতে সমস্যা হয়েছে');
       setToastType('error');
       setShowToast(true);
     } finally {

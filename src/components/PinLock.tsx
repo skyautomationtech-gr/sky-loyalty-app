@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Lock, Delete, RefreshCw, Sparkles, Mail, ArrowLeft, CheckCircle2, ShieldCheck, Fingerprint } from 'lucide-react';
-import emailjs from '@emailjs/browser';
+import { sendOtpEmail } from '../services/emailService';
 import { APP_NAME } from '../constants';
 
 interface PinLockProps {
@@ -25,10 +25,6 @@ export default function PinLock({ correctPin, userEmail, onSuccess, onLogout }: 
   const [confirmPin, setConfirmPin] = useState('');
 
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-  useEffect(() => {
-    emailjs.init("RoRkAJ90h9lt1nthn");
-  }, []);
 
   const handleNumber = (num: string) => {
     if (mode === 'PIN') {
@@ -55,20 +51,11 @@ export default function PinLock({ correctPin, userEmail, onSuccess, onLogout }: 
     setOtpExpiry(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
 
     try {
-      await emailjs.send(
-        "service_tps9s6a",
-        "template_0ahal91",
-        {
-          to_email: userEmail,
-          passcode: code,
-          time: new Date().toLocaleTimeString(),
-          company_name: APP_NAME
-        }
-      );
+      await sendOtpEmail(userEmail, 'User', code);
       setMode('OTP');
-    } catch (err) {
+    } catch (err: any) {
       console.error('EmailJS Error:', err);
-      setOtpError('OTP পাঠাতে ব্যর্থ হয়েছে।');
+      setOtpError(err.message || 'OTP পাঠাতে ব্যর্থ হয়েছে।');
     } finally {
       setLoading(false);
     }

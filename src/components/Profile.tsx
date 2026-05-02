@@ -1,4 +1,6 @@
 import { useState, useMemo, memo } from 'react';
+import { db } from '../firebase';
+import { collection, query, where, getDocs, updateDoc, doc, addDoc } from 'firebase/firestore';
 import { Staff, Customer } from '../types';
 import { 
   User, 
@@ -46,12 +48,48 @@ function Profile({ user, customers, onLogout, onNavigate }: ProfileProps) {
   const [loading, setLoading] = useState(false);
 
   const handleReferralBonus = async () => {
-    if (!referralCode) return;
+    if (!referralCode || !user) return;
     setLoading(true);
-    // TODO: Implement referral logic (find customer, add points, log transaction)
-    console.log('Awarding bonus for:', referralCode);
-    setLoading(false);
-    setReferralCode('');
+    try {
+      const code = referralCode.toUpperCase();
+      // Find customer by referral code or ID
+      const q = query(collection(db, 'customers'), where('referralCode', '==', code));
+      const q2 = query(collection(db, 'customers'), where('customerId', '==', code));
+      
+      const [snap1, snap2] = await Promise.all([getDocs(q), getDocs(q2)]);
+      const targetDoc = snap1.docs[0] || snap2.docs[0];
+
+      if (targetDoc) {
+        const customer = { id: targetDoc.id, ...targetDoc.data() } as Customer;
+        const bonusAmount = 5; // Standard manual bonus
+        const newPoints = customer.points + bonusAmount;
+        
+        await updateDoc(doc(db, 'customers', targetDoc.id), {
+          points: newPoints,
+          lastVisit: new Date().toISOString()
+        });
+
+        await addDoc(collection(db, 'transactions'), {
+          customerId: targetDoc.id,
+          type: 'ADD',
+          amount: bonusAmount,
+          pointsAfter: newPoints,
+          description: 'ম্যানুয়াল বোনাস (স্টাফ কর্তৃক)',
+          timestamp: new Date().toISOString(),
+          staffId: user.id
+        });
+
+        alert(`সফল হয়েছে! ${customer.name}-কে ${bonusAmount} পয়েন্ট বোনাস দেওয়া হয়েছে। ✅`);
+      } else {
+        alert('কাস্টমার খুঁজে পাওয়া যায়নি! সম্ভবত কোডটি ভুল। ❌');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('ত্রুটি হয়েছে। আবার চেষ্টা করুন।');
+    } finally {
+      setLoading(false);
+      setReferralCode('');
+    }
   };
 
   const getInitials = (name: string) => {

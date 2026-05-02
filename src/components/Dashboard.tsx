@@ -23,10 +23,11 @@ interface DashboardProps {
   staff: Staff[];
   notifications: Notification[];
   redeemCount: number;
+  transactions: any[];
   onAddCustomer: () => void;
 }
 
-function Dashboard({ user, customers, staff, notifications, redeemCount, onAddCustomer }: DashboardProps) {
+function Dashboard({ user, customers, staff, notifications, redeemCount, transactions, onAddCustomer }: DashboardProps) {
   const { t } = useLanguage();
   const totalPoints = useMemo(() => customers.reduce((acc, m) => acc + m.points, 0), [customers]);
   
@@ -63,29 +64,38 @@ function Dashboard({ user, customers, staff, notifications, redeemCount, onAddCu
   ], [customers]);
 
   const chartData = useMemo(() => {
-    // Real data for points trend (placeholder for now, but not mock)
-    return [
-      { name: 'Sat', points: 0 },
-      { name: 'Sun', points: 0 },
-      { name: 'Mon', points: 0 },
-      { name: 'Tue', points: 0 },
-      { name: 'Wed', points: 0 },
-      { name: 'Thu', points: 0 },
-      { name: 'Fri', points: 0 },
-    ];
-  }, []);
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return {
+        dateStr: d.toISOString().split('T')[0],
+        label: d.toLocaleDateString('en-US', { weekday: 'short' })
+      };
+    });
+
+    return last7Days.map(day => {
+      const points = transactions
+        .filter(tx => tx.type === 'ADD' && tx.timestamp.startsWith(day.dateStr))
+        .reduce((sum, tx) => sum + tx.amount, 0);
+      return { name: day.label, points };
+    });
+  }, [transactions]);
 
   const topCustomers = useMemo(() => {
     return [...customers].sort((a, b) => b.points - a.points).slice(0, 3);
   }, [customers]);
 
   const todaysPoints = useMemo(() => {
-    return 0;
-  }, []);
+    const today = new Date().toISOString().split('T')[0];
+    return transactions
+      .filter(tx => tx.type === 'ADD' && tx.timestamp.startsWith(today))
+      .reduce((acc, tx) => acc + tx.amount, 0);
+  }, [transactions]);
 
   const todaysCustomers = useMemo(() => {
-    return 0;
-  }, []);
+    const today = new Date().toISOString().split('T')[0];
+    return customers.filter(c => c.joinedAt && c.joinedAt.startsWith(today)).length;
+  }, [customers]);
 
   return (
     <div className="min-h-screen bg-[#F4F7F6] pb-24 -mx-6 -mt-[50px] pt-[50px]">

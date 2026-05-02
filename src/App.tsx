@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { db, auth, handleFirestoreError, OperationType } from './firebase';
 import { collection, onSnapshot, query, where, doc, getDoc, getDocs, addDoc, orderBy, limit } from 'firebase/firestore';
-import { Staff, Customer, Notification } from './types';
+import { Staff, Customer, Notification, Transaction } from './types';
 import { logAction } from './services/auditService';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
@@ -30,7 +30,12 @@ import BulkImportExport from './components/BulkImportExport';
 import CustomerPortal from './components/CustomerPortal';
 import AuditLogs from './components/AuditLogs';
 import PwaUpdatePrompt from './components/PwaUpdatePrompt';
+import OfflineBanner from './components/OfflineBanner';
 import { useInstallPrompt } from './hooks/useInstallPrompt';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Toast as CapacitorToast } from '@capacitor/toast';
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { SplashScreen } from '@capacitor/splash-screen';
 import { useLanguage } from './contexts/LanguageContext';
 import { 
   Home, 
@@ -51,8 +56,13 @@ export default function App() {
   const { t } = useLanguage();
   const { showInstallPrompt, handleInstall, handleDismiss } = useInstallPrompt();
   const [staffInfo, setStaffInfo] = useState<Staff | null>(() => {
-    const saved = localStorage.getItem('sky_tech_session');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('sky_tech_session');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.error("Error parsing staff session:", e);
+      return null;
+    }
   });
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
@@ -65,9 +75,49 @@ export default function App() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [staffList, setStaffList] = useState<Staff[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [redeemCount, setRedeemCount] = useState(0);
   const [scannedCustomerId, setScannedCustomerId] = useState<string | null>(null);
-  
+  const [lastBackPress, setLastBackPress] = useState(0);
+  const [subView, setSubView] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
+
+  // Native App Setup (Status Bar, Splash Screen)
+  useEffect(() => {
+    const setupNative = async () => {
+      try {
+        await StatusBar.setStyle({ style: Style.Dark });
+        await StatusBar.setBackgroundColor({ color: '#00BFA6' });
+        await SplashScreen.hide();
+      } catch (e) {
+        // Ignore on web
+      }
+    };
+    setupNative();
+  }, []);
+
+  // Native Back Button Handling
+  useEffect(() => {
+    const backButtonListener = CapacitorApp.addListener('backButton', () => {
+      if (subView) {
+        setSubView(null);
+      } else if (activeTab !== 'dashboard') {
+        setActiveTab('dashboard');
+      } else {
+        // On dashboard - do nothing (never close app as requested)
+      }
+    });
+
+    return () => {
+      backButtonListener.then(l => l.remove());
+    };
+  }, [activeTab, subView]);
+
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (user) => {
       if (user) {
@@ -109,32 +159,33 @@ export default function App() {
     return unsub;
   }, [staffInfo]);
 
-  const [subView, setSubView] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [retryCount, setRetryCount] = useState(0);
-  const [isRetrying, setIsRetrying] = useState(false);
-  const [showToast, setShowToast] = useState(false);
-  const [toastMsg, setToastMsg] = useState('');
-  const [toastType, setToastType] = useState<'success' | 'error'>('success');
-
   // Handle UI Back Button
   const handleBack = useCallback(() => {
-    const currentHash = window.location.hash;
-    window.history.back();
-    
-    setTimeout(() => {
-      if (window.location.hash === currentHash) {
-        // Fallback if history.back() didn't do anything
-        if (subView) {
-          setSubView(null);
-          window.location.hash = activeTab;
-        } else {
-          setActiveTab('dashboard');
-          window.location.hash = 'dashboard';
-        }
+    if (subView) {
+      setSubView(null);
+    } else {
+      setActiveTab('dashboard');
+    }
+  }, [subView]);
+
+  // Android Hardware Back Button Fix
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      e.preventDefault();
+      if (subView || activeTab !== 'dashboard') {
+        handleBack();
       }
-    }, 50);
-  }, [activeTab, subView]);
+    };
+    
+    window.addEventListener('popstate', handlePopState);
+    
+    // Push state for each screen
+    window.history.pushState({ screen: subView || activeTab }, '');
+    
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [activeTab, subView, handleBack]);
 
   // Listen to browser back/forward (hashchange)
   useEffect(() => {
@@ -207,9 +258,14 @@ export default function App() {
 
   useEffect(() => {
     // Splash screen timer
-    const splashTimer = setTimeout(() => setShowSplash(false), 2500);
-    // Initial data load simulation - Minimum 1000ms to prevent flash
-    const loadTimer = setTimeout(() => setLoading(false), 1000);
+    const splashTimer = setTimeout(() => {
+      setShowSplash(false);
+    }, 2500);
+    
+    // Initial data load simulation
+    const loadTimer = setTimeout(() => {
+      setLoading(false);
+    }, 1000);
 
     return () => {
       clearTimeout(splashTimer);
@@ -293,7 +349,9 @@ export default function App() {
     });
 
     const unsubTransactions = onSnapshot(collection(db, 'transactions'), (snap) => {
-      const redeems = snap.docs.filter(d => d.data().type === 'REDEEM').length;
+      const txs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+      setTransactions(txs);
+      const redeems = txs.filter(tx => tx.type === 'REDEEM').length;
       setRedeemCount(redeems);
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, 'transactions');
@@ -449,9 +507,10 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="flex flex-col h-screen overflow-hidden bg-white">
+      <OfflineBanner />
+      <div className="flex flex-col h-screen overflow-hidden bg-white safe-top safe-bottom">
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto pt-[50px] pb-[80px] px-6">
+        <main className="flex-1 overflow-y-auto pb-[80px] px-6">
         <AnimatePresence mode="wait">
           <motion.div
             key={subView || activeTab}
@@ -459,7 +518,7 @@ export default function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="h-full"
+            className="h-full screen-transition"
           >
             {subView ? (
               subView === 'settings' ? (
@@ -529,6 +588,7 @@ export default function App() {
                     staff={staffList} 
                     notifications={notifications} 
                     redeemCount={redeemCount}
+                    transactions={transactions}
                     onAddCustomer={() => setActiveTab('add-customer')}
                   />
                 )}
@@ -566,7 +626,7 @@ export default function App() {
       </main>
 
       {/* Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-[430px] mx-auto bg-white border-t border-[#E8F0EF] px-2 h-[65px] flex justify-around items-center z-50 shadow-[0_-8px_30px_rgba(0,0,0,0.05)]">
+      <nav className="bottom-nav border-t border-[#E8F0EF] px-2 flex justify-around items-center z-50">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id && !subView;
