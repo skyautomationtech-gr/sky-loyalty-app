@@ -6,7 +6,7 @@ import { LanguageProvider } from './contexts/LanguageContext';
 import emailjs from '@emailjs/browser';
 
 // Initialize EmailJS
-emailjs.init("RoRkAJ90h9lt1nthn");
+emailjs.init("5Y8JNPkc9rD-UJzeE");
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

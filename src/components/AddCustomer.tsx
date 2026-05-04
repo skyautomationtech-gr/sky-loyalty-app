@@ -79,6 +79,31 @@ function AddCustomer({ onSuccess }: AddCustomerProps) {
       
       await addDoc(collection(db, 'customers'), newCustomer);
       
+      // Send Welcome WhatsApp
+      const sendWelcomeWhatsApp = (c: any) => {
+        const phone = c.phone
+          .replace(/\D/g, '')
+          .replace(/^0/, '88');
+        
+        const message = 
+          `🌟 স্বাগতম, ${c.name}!\n\n` +
+          `আপনি Sky Automation Tech Loyalty Program-এ যোগ দিয়েছেন!\n\n` +
+          `🪪 আপনার কার্ড নম্বর: *${c.customerId}*\n` +
+          `🎁 আপনার রেফারেল কোড: *${c.referralCode}*\n` +
+          `⭐ বর্তমান পয়েন্ট: *${c.points} পয়েন্ট*\n` +
+          `🏆 টায়ার: *Bronze*\n\n` +
+          `রেফারেল কোড শেয়ার করুন —\n` +
+          `আপনি ও আপনার বন্ধু উভয়ই *২ পয়েন্ট* পাবেন!\n\n` +
+          `📞 যোগাযোগ: 01967017506\n` +
+          `💬 WhatsApp: 01577351518\n\n` +
+          `ধন্যবাদ Sky Automation Tech! 🛍️`;
+
+        const url = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+        window.open(url, '_blank');
+      };
+
+      sendWelcomeWhatsApp(newCustomer);
+      
       // If referred, add 2 bonus points to referrer
       if (formData.referralCode) {
         const q = query(collection(db, 'customers'), where('referralCode', '==', formData.referralCode));

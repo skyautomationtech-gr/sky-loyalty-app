@@ -3,7 +3,6 @@ import { APP_NAME } from '../constants';
 
 const SERVICE_ID = "service_tps9s6a";
 const TEMPLATE_ID = "template_0ahal91";
-const PUBLIC_KEY = "RoRkAJ90h9lt1nthn";
 
 /**
  * Sends an OTP email to the specified user.
@@ -13,19 +12,18 @@ const PUBLIC_KEY = "RoRkAJ90h9lt1nthn";
  */
 export const sendOtpEmail = async (email: string, name: string, otp: string): Promise<void> => {
   try {
-    await emailjs.send(
+    const response = await emailjs.send(
       SERVICE_ID,
       TEMPLATE_ID,
       {
         to_email: email,
         passcode: otp,
         time: new Date().toLocaleTimeString()
-      },
-      PUBLIC_KEY
+      }
     );
-    console.log('OTP sent successfully');
-  } catch (error) {
-    console.error("EmailJS Error:", error);
-    throw new Error('OTP পাঠাতে ব্যর্থ হয়েছে। ইমেইল অ্যাড্রেস সঠিক কিনা দেখে আবার চেষ্টা করুন।');
+    console.log('Success:', response.status, response.text);
+  } catch (error: any) {
+    console.error('EmailJS Error:', JSON.stringify(error));
+    throw error;
   }
 };
