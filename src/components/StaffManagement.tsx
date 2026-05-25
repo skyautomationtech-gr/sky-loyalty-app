@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, orderBy } from 'firebase/firestore';
+import { sendToSheets } from '../services/sheetsService';
 import { Staff, Role } from '../types';
 import { APP_LOGO, APP_NAME } from '../constants';
 import { 
@@ -96,6 +97,14 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
         status: 'active'
       });
       
+      // Sync to Google Sheets
+      sendToSheets('Staff', {
+        name: formData.name,
+        email: formData.email,
+        role: formData.role,
+        addedDate: new Date().toISOString()
+      });
+
       setIsAddModalOpen(false);
       setFormData({ name: '', email: '', password: '', role: 'Staff', status: 'active' });
       setToastMsg('স্টাফ সফলভাবে যোগ হয়েছে! ✅');

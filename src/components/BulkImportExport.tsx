@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc, writeBatch } from 'firebase/firestore';
+import { sendToSheets } from '../services/sheetsService';
 import { Download, Upload, FileText, X, Check, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Customer } from '../types';
@@ -100,10 +101,24 @@ export default function BulkImportExport({ onBack }: BulkImportExportProps) {
         });
 
         try {
-          await addDoc(collection(db, 'customers'), {
+          const newC = {
             ...customerData,
             lastVisit: new Date().toISOString()
+          };
+          await addDoc(collection(db, 'customers'), newC);
+          
+          // Sync to Google Sheets
+          sendToSheets('Customers', {
+            id: newC.customerId,
+            name: newC.name,
+            phone: newC.phone,
+            address: newC.address,
+            referralCode: newC.referralCode,
+            points: newC.points,
+            tier: newC.tier,
+            joinDate: newC.joinedAt
           });
+          
           successCount++;
         } catch (err) {
           console.error('Import line failed:', err);

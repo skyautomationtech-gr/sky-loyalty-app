@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import { Customer, Staff, Transaction } from '../types';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, addDoc, updateDoc, doc, deleteDoc, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { sendToSheets } from '../services/sheetsService';
 import { Search, Plus, Phone, MapPin, Zap, ShoppingBag, History, Edit2, Trash2, X, Download, Users, ChevronRight, MessageSquare, RefreshCw, ArrowUpRight, Sparkles, UserCheck, Share2, Crown, Shield, ArrowDown, ArrowUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -345,6 +346,18 @@ function CustomerDetailModal({ customer, user, onClose }: { customer: Customer, 
         message: `${customer.name} ${type === 'ADD' ? 'earned' : 'redeemed'} ${amount} points`,
         type: type === 'ADD' ? 'SUCCESS' : 'INFO',
         timestamp: new Date().toISOString(),
+      });
+
+      // Sync to Google Sheets
+      sendToSheets('Transactions', {
+        customerId: customer.customerId,
+        customerName: customer.name,
+        phone: customer.phone,
+        action: type,
+        points: amount,
+        totalPoints: newPoints,
+        [type === 'ADD' ? 'addedBy' : 'redeemedBy']: user?.name || 'system',
+        date: new Date().toISOString()
       });
 
       setToastMsg(`পয়েন্ট ${type === 'ADD' ? 'যোগ' : 'রিডিম'} সফল হয়েছে!`);

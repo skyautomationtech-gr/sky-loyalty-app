@@ -1,6 +1,7 @@
 import React, { useState, memo } from 'react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, addDoc, getDocs, query, orderBy, limit, where, updateDoc } from 'firebase/firestore';
+import { sendToSheets } from '../services/sheetsService';
 import { UserPlus, User, Phone, MapPin, Sparkles, ArrowRight, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
 import Toast from './Toast';
@@ -79,6 +80,18 @@ function AddCustomer({ onSuccess }: AddCustomerProps) {
       
       await addDoc(collection(db, 'customers'), newCustomer);
       
+      // Sync to Google Sheets
+      sendToSheets('Customers', {
+        id: customerId,
+        name: newCustomer.name,
+        phone: newCustomer.phone,
+        address: newCustomer.address,
+        referralCode: newCustomer.referralCode,
+        points: newCustomer.points,
+        tier: newCustomer.tier,
+        joinDate: newCustomer.joinedAt
+      });
+
       // Send Welcome WhatsApp
       const sendWelcomeWhatsApp = (c: any) => {
         const phone = c.phone
