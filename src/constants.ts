@@ -1,7 +1,8 @@
 import { Tier, TierConfig, LoyaltyRule } from './types';
+import SAT_LOGO from './Sky_Automation_Tech_Logo.jpeg';
 
 export const APP_NAME = 'Sky Automation Tech';
-export const APP_LOGO = 'https://i.ibb.co/KzhvR5kj/SAT.png'; // Attempting direct link from ImgBB ID
+export const APP_LOGO = SAT_LOGO;
 
 export const TIER_CONFIGS: Record<Tier, TierConfig> = {
   BRONZE: {

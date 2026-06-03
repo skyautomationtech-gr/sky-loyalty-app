@@ -37,11 +37,17 @@ function QRScanner({ onScan, onClose }: QRScannerProps) {
 
     const startScanner = async () => {
       try {
-        const permission = await CapacitorCamera.requestPermissions({
-          permissions: ['camera']
-        });
+        let permissionGranted = true;
         
-        if (permission.camera !== 'granted') {
+        // Only request permissions via Capacitor on native platforms
+        if (typeof window !== 'undefined' && 'Capacitor' in window && (window as any).Capacitor.isNative) {
+          const permission = await CapacitorCamera.requestPermissions({
+            permissions: ['camera']
+          });
+          permissionGranted = permission.camera === 'granted';
+        }
+        
+        if (!permissionGranted) {
           if (active) setHasPermission(false);
           return;
         }
