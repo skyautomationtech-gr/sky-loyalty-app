@@ -509,7 +509,7 @@ export default function App() {
     <ErrorBoundary>
       <OfflineBanner />
       <div className="flex items-center justify-center min-h-screen bg-slate-100 safe-top safe-bottom">
-        <div className="w-full max-w-[430px] h-screen bg-white shadow-2xl overflow-hidden relative flex flex-col">
+        <div className="w-full h-screen bg-white shadow-2xl overflow-hidden relative flex flex-col md:max-w-[768px] md:h-[90vh] md:rounded-[3rem] md:my-auto">
           {/* Main Content */}
           <main className="flex-1 overflow-y-auto pb-[80px] px-6">
           <AnimatePresence mode="wait">
