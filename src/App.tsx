@@ -508,202 +508,204 @@ export default function App() {
   return (
     <ErrorBoundary>
       <OfflineBanner />
-      <div className="flex flex-col h-screen overflow-hidden bg-white safe-top safe-bottom">
-        {/* Main Content */}
-        <main className="flex-1 overflow-y-auto pb-[80px] px-6">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={subView || activeTab}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="h-full screen-transition"
-          >
-            {subView ? (
-              subView === 'settings' ? (
-                <Settings 
-                  user={staffInfo} 
-                  staff={staffList} 
-                  onLogout={handleLogout}
-                  onBack={handleBack}
-                  onNavigate={(view) => setSubView(view)}
-                />
-              ) : subView === 'staff' ? (
-                <StaffManagement 
-                  currentUser={staffInfo}
-                  onBack={handleBack}
-                />
-              ) : subView === 'rules' ? (
-                <LoyaltyRules 
-                  currentUser={staffInfo}
-                  onBack={handleBack}
-                />
-              ) : subView === 'notifications' ? (
-                <Notifications onBack={handleBack} />
-              ) : subView === 'about' ? (
-                <About onBack={handleBack} />
-              ) : subView === 'edit-profile' ? (
-                <EditProfile 
-                  user={staffInfo} 
-                  onBack={handleBack} 
-                  onUpdate={(u) => setStaffInfo(u)}
-                />
-              ) : subView === 'password' ? (
-                <ChangePassword user={staffInfo} onBack={handleBack} />
-              ) : subView === 'lock' ? (
-                <AppLockSettings onBack={handleBack} />
-              ) : subView === 'sessions' ? (
-                <ActiveSessions user={staffInfo} onBack={handleBack} onLogoutAll={handleLogout} />
-              ) : subView === '2fa' ? (
-                <TwoFactorAuth user={staffInfo} onBack={handleBack} />
-              ) : subView === 'support' ? (
-                <ContactSupport onBack={handleBack} />
-              ) : subView === 'rewards' ? (
-                <RewardCatalog currentUser={staffInfo} onBack={handleBack} />
-              ) : subView === 'branches' ? (
-                <BranchManagement currentUser={staffInfo} onBack={handleBack} />
-              ) : subView === 'import-export' ? (
-                <BulkImportExport onBack={handleBack} />
-              ) : subView === 'audit-logs' ? (
-                <AuditLogs onBack={handleBack} />
-              ) : (
-                <ComingSoon 
-                  featureName={
-                    subView === 'reports' ? 'রিপোর্ট ও অ্যানালিটিক্স' :
-                    subView === 'theme' ? 'থিম (Theme)' :
-                    subView === 'language' ? 'ভাষা (Language)' :
-                    subView === 'rate' ? 'রেট অ্যাপ' :
-                    subView.charAt(0).toUpperCase() + subView.slice(1)
-                  } 
-                  onBack={handleBack} 
-                />
-              )
-            ) : (
-              <>
-                {activeTab === 'dashboard' && (
-                  <Dashboard 
+      <div className="flex items-center justify-center min-h-screen bg-slate-100 safe-top safe-bottom">
+        <div className="w-full max-w-[430px] h-screen bg-white shadow-2xl overflow-hidden relative flex flex-col">
+          {/* Main Content */}
+          <main className="flex-1 overflow-y-auto pb-[80px] px-6">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={subView || activeTab}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="h-full screen-transition"
+            >
+              {subView ? (
+                subView === 'settings' ? (
+                  <Settings 
                     user={staffInfo} 
-                    customers={customers} 
                     staff={staffList} 
-                    notifications={notifications} 
-                    redeemCount={redeemCount}
-                    transactions={transactions}
-                    onAddCustomer={() => setActiveTab('add-customer')}
-                  />
-                )}
-                {activeTab === 'customers' && (
-                  <Customers 
-                    user={staffInfo} 
-                    customers={customers} 
-                    initialSelectedId={scannedCustomerId}
-                    onClearInitialId={() => setScannedCustomerId(null)}
-                  />
-                )}
-                {activeTab === 'add-customer' && (
-                  <AddCustomer 
-                    onSuccess={() => setActiveTab('customers')} 
-                  />
-                )}
-                {activeTab === 'scanner' && (
-                  <QRScanner 
-                    onScan={handleScan}
-                    onClose={handleBack}
-                  />
-                )}
-                {activeTab === 'profile' && (
-                  <Profile 
-                    user={staffInfo} 
-                    customers={customers}
                     onLogout={handleLogout}
+                    onBack={handleBack}
                     onNavigate={(view) => setSubView(view)}
                   />
-                )}
-              </>
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </main>
-
-      {/* Bottom Nav */}
-      <nav className="bottom-nav border-t border-[#E8F0EF] px-2 flex justify-around items-center z-50">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id && !subView;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => {
-                if (activeTab === tab.id && !subView) return;
-                setSubView(null);
-                setActiveTab(tab.id);
-              }}
-              className="relative flex flex-col items-center justify-center gap-1 w-full h-full group"
-            >
-              <div className={`transition-all duration-300 ${
-                isActive ? 'text-teal-primary scale-110' : 'text-[#8A9BA8] group-hover:text-[#6B8F8A]'
-              }`}>
-                <Icon className="w-6 h-6" />
-              </div>
-              <span className={`text-[10px] font-bold tracking-wider transition-colors ${
-                isActive ? 'text-teal-primary' : 'text-[#8A9BA8]'
-              }`}>
-                {tab.label}
-              </span>
-              {isActive && (
-                <motion.div 
-                  layoutId="activeTabDot"
-                  className="absolute bottom-1 w-1 h-1 bg-teal-primary rounded-full"
-                />
+                ) : subView === 'staff' ? (
+                  <StaffManagement 
+                    currentUser={staffInfo}
+                    onBack={handleBack}
+                  />
+                ) : subView === 'rules' ? (
+                  <LoyaltyRules 
+                    currentUser={staffInfo}
+                    onBack={handleBack}
+                  />
+                ) : subView === 'notifications' ? (
+                  <Notifications onBack={handleBack} />
+                ) : subView === 'about' ? (
+                  <About onBack={handleBack} />
+                ) : subView === 'edit-profile' ? (
+                  <EditProfile 
+                    user={staffInfo} 
+                    onBack={handleBack} 
+                    onUpdate={(u) => setStaffInfo(u)}
+                  />
+                ) : subView === 'password' ? (
+                  <ChangePassword user={staffInfo} onBack={handleBack} />
+                ) : subView === 'lock' ? (
+                  <AppLockSettings onBack={handleBack} />
+                ) : subView === 'sessions' ? (
+                  <ActiveSessions user={staffInfo} onBack={handleBack} onLogoutAll={handleLogout} />
+                ) : subView === '2fa' ? (
+                  <TwoFactorAuth user={staffInfo} onBack={handleBack} />
+                ) : subView === 'support' ? (
+                  <ContactSupport onBack={handleBack} />
+                ) : subView === 'rewards' ? (
+                  <RewardCatalog currentUser={staffInfo} onBack={handleBack} />
+                ) : subView === 'branches' ? (
+                  <BranchManagement currentUser={staffInfo} onBack={handleBack} />
+                ) : subView === 'import-export' ? (
+                  <BulkImportExport onBack={handleBack} />
+                ) : subView === 'audit-logs' ? (
+                  <AuditLogs onBack={handleBack} />
+                ) : (
+                  <ComingSoon 
+                    featureName={
+                      subView === 'reports' ? 'রিপোর্ট ও অ্যানালিটিক্স' :
+                      subView === 'theme' ? 'থিম (Theme)' :
+                      subView === 'language' ? 'ভাষা (Language)' :
+                      subView === 'rate' ? 'রেট অ্যাপ' :
+                      subView.charAt(0).toUpperCase() + subView.slice(1)
+                    } 
+                    onBack={handleBack} 
+                  />
+                )
+              ) : (
+                <>
+                  {activeTab === 'dashboard' && (
+                    <Dashboard 
+                      user={staffInfo} 
+                      customers={customers} 
+                      staff={staffList} 
+                      notifications={notifications} 
+                      redeemCount={redeemCount}
+                      transactions={transactions}
+                      onAddCustomer={() => setActiveTab('add-customer')}
+                    />
+                  )}
+                  {activeTab === 'customers' && (
+                    <Customers 
+                      user={staffInfo} 
+                      customers={customers} 
+                      initialSelectedId={scannedCustomerId}
+                      onClearInitialId={() => setScannedCustomerId(null)}
+                    />
+                  )}
+                  {activeTab === 'add-customer' && (
+                    <AddCustomer 
+                      onSuccess={() => setActiveTab('customers')} 
+                    />
+                  )}
+                  {activeTab === 'scanner' && (
+                    <QRScanner 
+                      onScan={handleScan}
+                      onClose={handleBack}
+                    />
+                  )}
+                  {activeTab === 'profile' && (
+                    <Profile 
+                      user={staffInfo} 
+                      customers={customers}
+                      onLogout={handleLogout}
+                      onNavigate={(view) => setSubView(view)}
+                    />
+                  )}
+                </>
               )}
-            </button>
-          );
-        })}
-      </nav>
-      <Toast 
-        show={showToast} 
-        message={toastMsg} 
-        type={toastType} 
-        onClose={() => setShowToast(false)} 
-      />
-      <PwaUpdatePrompt />
-      
-      {/* Install Prompt */}
-      <AnimatePresence>
-        {showInstallPrompt && (
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-20 left-4 right-4 z-[90] bg-white rounded-2xl shadow-2xl border border-teal-primary/20 p-4 flex items-center justify-between gap-4"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-teal-primary/10 rounded-xl flex items-center justify-center">
-                <Download className="w-5 h-5 text-teal-primary" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-dark-text">হোম স্ক্রিনে যোগ করুন</h3>
-                <p className="text-[10px] font-bold text-gray-text">অ্যাপের মতো ব্যবহার করতে</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={handleDismiss}
-                className="px-3 py-2 text-xs font-bold text-gray-text hover:bg-bg-light rounded-lg transition-colors"
+            </motion.div>
+          </AnimatePresence>
+        </main>
+  
+        {/* Bottom Nav */}
+        <nav className="bottom-nav border-t border-[#E8F0EF] px-2 flex justify-around items-center z-50 h-[80px] bg-white">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id && !subView;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  if (activeTab === tab.id && !subView) return;
+                  setSubView(null);
+                  setActiveTab(tab.id);
+                }}
+                className="relative flex flex-col items-center justify-center gap-1 w-full h-full group"
               >
-                পরে
+                <div className={`transition-all duration-300 ${
+                  isActive ? 'text-teal-primary scale-110' : 'text-[#8A9BA8] group-hover:text-[#6B8F8A]'
+                }`}>
+                  <Icon className="w-6 h-6" />
+                </div>
+                <span className={`text-[10px] font-bold tracking-wider transition-colors ${
+                  isActive ? 'text-teal-primary' : 'text-[#8A9BA8]'
+                }`}>
+                  {tab.label}
+                </span>
+                {isActive && (
+                  <motion.div 
+                    layoutId="activeTabDot"
+                    className="absolute bottom-1 w-1 h-1 bg-teal-primary rounded-full"
+                  />
+                )}
               </button>
-              <button 
-                onClick={handleInstall}
-                className="px-4 py-2 bg-[#00BFA6] text-white text-xs font-black rounded-lg shadow-md shadow-teal-primary/20"
-              >
-                ইনস্টল
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+            );
+          })}
+        </nav>
+        <Toast 
+          show={showToast} 
+          message={toastMsg} 
+          type={toastType} 
+          onClose={() => setShowToast(false)} 
+        />
+        <PwaUpdatePrompt />
+        
+        {/* Install Prompt */}
+        <AnimatePresence>
+          {showInstallPrompt && (
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              className="fixed bottom-24 left-4 right-4 z-[90] bg-white rounded-2xl shadow-2xl border border-teal-primary/20 p-4 flex items-center justify-between gap-4"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-teal-primary/10 rounded-xl flex items-center justify-center">
+                  <Download className="w-5 h-5 text-teal-primary" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-dark-text">হোম স্ক্রিনে যোগ করুন</h3>
+                  <p className="text-[10px] font-bold text-gray-text">অ্যাপের মতো ব্যবহার করতে</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleDismiss}
+                  className="px-3 py-2 text-xs font-bold text-gray-text hover:bg-bg-light rounded-lg transition-colors"
+                >
+                  পরে
+                </button>
+                <button 
+                  onClick={handleInstall}
+                  className="px-4 py-2 bg-[#00BFA6] text-white text-xs font-black rounded-lg shadow-md shadow-teal-primary/20"
+                >
+                  ইনস্টল
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+      </div>
     </ErrorBoundary>
   );
 }
