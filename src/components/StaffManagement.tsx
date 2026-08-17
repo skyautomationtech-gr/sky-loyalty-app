@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, orderBy, setDoc } from 'firebase/firestore';
 import { sendToSheets } from '../services/sheetsService';
 import { Staff, Role } from '../types';
 import { APP_LOGO, APP_NAME } from '../constants';
@@ -57,10 +57,29 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
 
   useEffect(() => {
     const q = query(collection(db, 'staff'), orderBy('addedDate', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
+    const unsub = onSnapshot(q, async (snap) => {
       const staffData = snap.docs.map(d => ({ id: d.id, ...d.data() } as Staff));
       setStaff(staffData);
       setLoading(false);
+
+      // Auto-migrate any legacy documents that don't have email as their document ID
+      for (const docSnap of snap.docs) {
+        const data = docSnap.data();
+        const docId = docSnap.id;
+        const emailKey = data.email?.toLowerCase().trim();
+        if (emailKey && docId !== emailKey) {
+          console.log(`Migrating legacy staff document: ${docId} -> ${emailKey}`);
+          try {
+            await setDoc(doc(db, 'staff', emailKey), {
+              ...data,
+              email: emailKey
+            });
+            await deleteDoc(doc(db, 'staff', docId));
+          } catch (migrateErr) {
+            console.error(`Failed to migrate ${docId}:`, migrateErr);
+          }
+        }
+      }
     }, (err) => {
       handleFirestoreError(err, OperationType.LIST, 'staff');
     });
@@ -71,11 +90,13 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
     e.preventDefault();
     setError('');
 
+    const normalizedEmail = formData.email.toLowerCase().trim();
+
     if (!formData.name.trim()) {
       setError('নাম খালি রাখা যাবে না');
       return;
     }
-    if (!formData.email.includes('@')) {
+    if (!normalizedEmail.includes('@')) {
       setError('সঠিক ইমেইল দিন');
       return;
     }
@@ -87,9 +108,9 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
     setLoading(true);
     try {
       const path = 'staff';
-      await addDoc(collection(db, path), {
+      await setDoc(doc(db, path, normalizedEmail), {
         name: formData.name,
-        email: formData.email,
+        email: normalizedEmail,
         password: formData.password,
         role: formData.role,
         addedBy: currentUser?.name || 'Master Admin',
@@ -100,7 +121,7 @@ export default function StaffManagement({ onBack, currentUser }: StaffManagement
       // Sync to Google Sheets
       sendToSheets('Staff', {
         name: formData.name,
-        email: formData.email,
+        email: normalizedEmail,
         role: formData.role,
         addedDate: new Date().toISOString()
       });

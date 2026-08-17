@@ -119,40 +119,10 @@ export default function App() {
   }, [activeTab, subView]);
 
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (user) => {
-      if (user) {
-        if (!staffInfo) {
-          try {
-            const q = query(collection(db, 'staff'), where('uid', '==', user.uid));
-            const snap = await getDocs(q);
-            if (!snap.empty) {
-              const userData = { id: snap.docs[0].id, ...snap.docs[0].data() } as Staff;
-              setStaffInfo(userData);
-              localStorage.setItem('sky_tech_session', JSON.stringify(userData));
-            } else if (user.email === "skyautomationtech@gmail.com") {
-              const masterAdmin: Staff = {
-                id: 'master-admin',
-                uid: user.uid,
-                name: 'Master Admin',
-                email: 'skyautomationtech@gmail.com',
-                role: 'Master Admin',
-                pin: '0000',
-                addedBy: 'System',
-                addedDate: new Date('2024-01-01T00:00:00.000Z').toISOString(),
-                status: 'active'
-              };
-              setStaffInfo(masterAdmin);
-              localStorage.setItem('sky_tech_session', JSON.stringify(masterAdmin));
-            }
-          } catch (err) {
-            console.error('Auth sync error:', err);
-          }
-        }
-      } else {
-        if (staffInfo) {
-          setStaffInfo(null);
-          localStorage.removeItem('sky_tech_session');
-        }
+    const unsub = auth.onAuthStateChanged((user) => {
+      if (!user && staffInfo) {
+        setStaffInfo(null);
+        localStorage.removeItem('sky_tech_session');
       }
       setIsAuthReady(true);
     });

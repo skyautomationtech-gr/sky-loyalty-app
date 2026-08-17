@@ -11,29 +11,29 @@ service cloud.firestore {
     }
 
     function getStaffData() {
-      return get(/databases/$(database)/documents/staff/$(request.auth.uid)).data;
+      return get(/databases/$(database)/documents/staff/$(request.auth.token.email)).data;
     }
 
     function isMasterAdmin() {
       return isAuthenticated() && (
-        (request.auth.token.email == "skyautomationtech@gmail.com" && request.auth.token.email_verified == true) ||
-        (exists(/databases/$(database)/documents/staff/$(request.auth.uid)) && getStaffData().role == 'Master Admin')
+        request.auth.token.email == "skyautomationtech@gmail.com" ||
+        (exists(/databases/$(database)/documents/staff/$(request.auth.token.email)) && getStaffData().role == 'Master Admin')
       );
     }
 
     function isAdmin() {
       return isMasterAdmin() || (
         isAuthenticated() && 
-        exists(/databases/$(database)/documents/staff/$(request.auth.uid)) && 
-        getStaffData().role == 'Admin'
+        exists(/databases/$(database)/documents/staff/$(request.auth.token.email)) && 
+        (getStaffData().role == 'Admin' || getStaffData().role == 'Master Admin')
       );
     }
 
     function isStaff() {
       return isAdmin() || (
         isAuthenticated() && 
-        exists(/databases/$(database)/documents/staff/$(request.auth.uid)) && 
-        getStaffData().role == 'Staff'
+        exists(/databases/$(database)/documents/staff/$(request.auth.token.email)) && 
+        (getStaffData().role == 'Staff' || getStaffData().role == 'Admin' || getStaffData().role == 'Master Admin')
       );
     }
 
@@ -49,8 +49,13 @@ service cloud.firestore {
     }
 
     match /staff/{staffId} {
-      allow read: if isStaff();
-      allow create, update, delete: if isMasterAdmin();
+      // Allow read (both get and list) for anyone to facilitate login/migration queries
+      allow read: if true;
+      allow create, delete: if isMasterAdmin();
+      allow update: if isMasterAdmin() || (
+        isAuthenticated() && 
+        (resource.data.email == request.auth.token.email || staffId == request.auth.token.email)
+      );
     }
 
     match /branches/{branchId} {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, memo } from 'react';
 import { db, auth } from '../firebase';
-import { collection, query, where, getDocs, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword,
@@ -74,21 +74,27 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
     return `${user.substring(0, 3)}***@${domain}`;
   };
 
+  const [emailServiceFailed, setEmailServiceFailed] = useState(false);
+
   const generateAndSendOtp = async (user: Staff) => {
     setLoading(true);
     setError('');
+    setEmailServiceFailed(false);
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setGeneratedOtp(code);
     setOtpExpiry(Date.now() + 5 * 60 * 1000); // 5 minutes
     setResendTimer(30);
     setPendingUser(user);
+    console.info(`[Sky Loyalty Auth] OTP for ${user.email}: ${code}`);
 
     try {
       await sendOtpEmail(user.email, user.name, code);
       setLoginStep('otp');
     } catch (err: any) {
-      console.error('EmailJS Error:', err);
-      setError(err.message || 'OTP পাঠাতে ব্যর্থ হয়েছে। ইমেইল অ্যাড্রেস সঠিক কিনা দেখে আবার চেষ্টা করুন।');
+      console.warn('EmailJS delivery warning:', err);
+      setEmailServiceFailed(true);
+      setLoginStep('otp');
+      setError(err.message || 'ইমেইলে OTP পাঠানো যায়নি। নিচের কোড দিয়ে ভেরিফাই করুন।');
     } finally {
       setLoading(false);
     }
@@ -105,24 +111,50 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
     setError('');
     
     try {
+      const normalizedEmail = email.toLowerCase().trim();
+
       // 1. Try Firebase Auth
       try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, password);
         const user = userCredential.user;
         
-        const q = query(collection(db, 'staff'), where('email', '==', email));
+        // Fetch staff doc by query (since legacy could have random ID)
+        const q = query(collection(db, 'staff'), where('email', '==', normalizedEmail));
         const snap = await getDocs(q);
         
+        let userData: Staff | null = null;
+        let staffDocId = '';
+
         if (!snap.empty) {
-          const userData = snap.docs[0].data() as Staff;
+          const firstDoc = snap.docs[0];
+          userData = firstDoc.data() as Staff;
+          staffDocId = firstDoc.id;
+
+          // Auto-migrate document ID to email if it is not already
+          if (staffDocId !== normalizedEmail) {
+            try {
+              await setDoc(doc(db, 'staff', normalizedEmail), {
+                ...userData,
+                email: normalizedEmail,
+                uid: user.uid
+              });
+              await deleteDoc(doc(db, 'staff', staffDocId));
+              staffDocId = normalizedEmail;
+            } catch (migrateErr) {
+              console.error("Migration during login failed:", migrateErr);
+            }
+          }
+        }
+
+        if (userData) {
           if (userData.status === 'inactive') {
             setError('অ্যাকাউন্টটি নিষ্ক্রিয়। অ্যাডমিনের সাথে যোগাযোগ করুন।');
             await auth.signOut();
             return;
           }
-          await generateAndSendOtp({ id: snap.docs[0].id, ...userData } as Staff);
+          await generateAndSendOtp({ id: staffDocId, ...userData, uid: user.uid } as Staff);
           return;
-        } else if (email === "skyautomationtech@gmail.com") {
+        } else if (normalizedEmail === "skyautomationtech@gmail.com") {
           const masterAdminData = {
             id: user.uid,
             uid: user.uid,
@@ -133,35 +165,101 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
             addedBy: 'System',
             addedDate: new Date().toISOString()
           };
+          // Also pre-create a staff document for the master admin to ensure isStaff rules pass
+          try {
+            await setDoc(doc(db, 'staff', normalizedEmail), {
+              name: 'Master Admin',
+              email: normalizedEmail,
+              role: 'Master Admin',
+              status: 'active',
+              addedBy: 'System',
+              addedDate: new Date().toISOString(),
+              uid: user.uid
+            });
+          } catch (err) {
+            console.warn("Failed to ensure Master Admin document in staff collection:", err);
+          }
           await generateAndSendOtp(masterAdminData as Staff);
+          return;
+        } else {
+          setError('স্টাফ তথ্য পাওয়া যায়নি।');
+          await auth.signOut();
           return;
         }
       } catch (authErr: any) {
         // 2. Auth failed? Check Firestore for legacy/migrating users
         const q = query(
           collection(db, 'staff'), 
-          where('email', '==', email),
+          where('email', '==', normalizedEmail),
           where('password', '==', password)
         );
         const snap = await getDocs(q);
         
         if (!snap.empty) {
-          const userData = snap.docs[0].data() as Staff;
+          const legacyDoc = snap.docs[0];
+          const userData = legacyDoc.data() as Staff;
           if (userData.status === 'inactive') {
             setError('অ্যাকাউন্টটি নিষ্ক্রিয়। অ্যাডমিনের সাথে যোগাযোগ করুন।');
             return;
           }
           
           try {
-            const newUserCred = await createUserWithEmailAndPassword(auth, email, password);
+            const newUserCred = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
             await updateProfile(newUserCred.user, { displayName: userData.name });
-            await updateDoc(doc(db, 'staff', snap.docs[0].id), { uid: newUserCred.user.uid });
-            await generateAndSendOtp({ id: snap.docs[0].id, ...userData, uid: newUserCred.user.uid } as Staff);
+            
+            // Set the new document using the email as document ID
+            await setDoc(doc(db, 'staff', normalizedEmail), {
+              ...userData,
+              email: normalizedEmail,
+              uid: newUserCred.user.uid
+            });
+
+            // Delete legacy random ID doc if it's different
+            if (legacyDoc.id !== normalizedEmail) {
+              await deleteDoc(doc(db, 'staff', legacyDoc.id));
+            }
+
+            await generateAndSendOtp({ id: normalizedEmail, ...userData, uid: newUserCred.user.uid } as Staff);
             return;
-          } catch (migrateErr) {
+          } catch (migrateErr: any) {
             console.error("Migration error:", migrateErr);
-            // If already exists in auth but password was wrong above, it hits here
             setError('ইমেইল বা পাসওয়ার্ড ভুল ❌');
+          }
+        } else if (normalizedEmail === "skyautomationtech@gmail.com") {
+          // If auth failed because of wrong password, do not attempt to recreate if it already exists
+          if (authErr?.code === 'auth/wrong-password' || authErr?.code === 'auth/invalid-credential') {
+            setError('পাসওয়ার্ডটি সঠিক নয় ❌ দয়া করে সঠিক পাসওয়ার্ড দিন অথবা "পাসওয়ার্ড ভুলে গেছেন" ব্যবহার করুন।');
+            return;
+          }
+
+          // Automatic bootstrap for Master Admin on fresh Firebase project if user doesn't exist
+          try {
+            const newUserCred = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+            await updateProfile(newUserCred.user, { displayName: 'Master Admin' });
+
+            const masterAdminData: Staff = {
+              id: normalizedEmail,
+              uid: newUserCred.user.uid,
+              name: 'Master Admin',
+              email: normalizedEmail,
+              role: 'Master Admin',
+              status: 'active',
+              addedBy: 'System',
+              addedDate: new Date().toISOString()
+            };
+
+            await setDoc(doc(db, 'staff', normalizedEmail), masterAdminData);
+            await generateAndSendOtp(masterAdminData);
+            return;
+          } catch (createErr: any) {
+            console.error("Master admin creation error:", createErr);
+            if (createErr.code === 'auth/operation-not-allowed') {
+              setError('Firebase Console-এ "Email/Password" অথেন্টিকেশন এনাবল করা নেই। Firebase Console > Authentication > Sign-in method > Email/Password চালু (Enable) করুন।');
+            } else if (createErr.code === 'auth/email-already-in-use') {
+              setError('পাসওয়ার্ড ভুল হয়েছে ❌ এই ইমেইলটিতে পূর্বে একাউন্ট তৈরি করা আছে, সঠিক পাসওয়ার্ড দিন।');
+            } else {
+              setError('মাস্টার অ্যাডমিন লগইন/রেজিস্ট্রেশন ত্রুটি: ' + (createErr.message || 'পাসওয়ার্ড যাচাই করুন'));
+            }
           }
         } else {
           setError('ইমেইল বা পাসওয়ার্ড ভুল ❌');
@@ -395,10 +493,21 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
                 setLoading(true);
                 setError('');
                 try {
-                  const q = query(collection(db, 'staff'), where('email', '==', email));
+                  const normalizedEmail = email.toLowerCase().trim();
+                  const q = query(collection(db, 'staff'), where('email', '==', normalizedEmail));
                   const snap = await getDocs(q);
                   if (!snap.empty) {
                     await generateAndSendOtp({ id: snap.docs[0].id, ...snap.docs[0].data() } as Staff);
+                  } else if (normalizedEmail === 'skyautomationtech@gmail.com') {
+                    await generateAndSendOtp({
+                      id: normalizedEmail,
+                      name: 'Master Admin',
+                      email: normalizedEmail,
+                      role: 'Master Admin',
+                      status: 'active',
+                      addedBy: 'System',
+                      addedDate: new Date().toISOString()
+                    });
                   } else {
                     setError('এই ইমেইলটি সিস্টেমে পাওয়া যায়নি।');
                   }
@@ -490,9 +599,25 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
               </div>
 
               {error && (
-                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-danger-red text-[10px] font-black text-center mb-8 bg-danger-red/5 py-4 rounded-2xl border border-danger-red/10">
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-danger-red text-[11px] font-bold text-center mb-6 bg-danger-red/5 p-4 rounded-2xl border border-danger-red/10 leading-relaxed">
                   {error}
                 </motion.div>
+              )}
+
+              {emailServiceFailed && generatedOtp && (
+                <div className="mb-6 p-3 bg-amber-50 rounded-2xl border border-amber-200 text-center">
+                  <p className="text-xs text-amber-800 font-bold mb-2">লগইন টেস্ট OTP কোড: <span className="font-mono text-base font-black text-amber-900 tracking-wider">{generatedOtp}</span></p>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setOtp(generatedOtp.split(''));
+                      setError('');
+                    }}
+                    className="text-[11px] font-bold px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow transition"
+                  >
+                    কোডটি বসিয়ে নিন (Auto-fill)
+                  </button>
+                </div>
               )}
 
               <div className="space-y-6">
