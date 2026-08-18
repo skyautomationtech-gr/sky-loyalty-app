@@ -18,7 +18,7 @@ if (PUBLIC_KEY) {
  * falling back to EmailJS if needed.
  */
 export const sendOtpEmail = async (email: string, name: string, otp: string): Promise<void> => {
-  // 1. Try Gmail SMTP via backend server
+  // 1. Try Gmail SMTP via backend server (works in both local, Cloud Run, and Vercel Serverless)
   try {
     const res = await fetch('/api/send-otp', {
       method: 'POST',
@@ -29,11 +29,13 @@ export const sendOtpEmail = async (email: string, name: string, otp: string): Pr
     });
 
     if (res.ok) {
-      const data = await res.json();
-      console.log('✅ OTP sent via Gmail SMTP:', data);
-      return;
+      const data = await res.json().catch(() => null);
+      if (data && data.success) {
+        console.log('✅ OTP sent via Gmail SMTP:', data);
+        return;
+      }
     } else {
-      const errData = await res.json().catch(() => ({}));
+      const errData = await res.json().catch(() => null);
       console.warn('Gmail SMTP endpoint returned error, trying fallback:', errData);
     }
   } catch (apiErr) {
@@ -66,5 +68,5 @@ export const sendOtpEmail = async (email: string, name: string, otp: string): Pr
     }
   }
 
-  throw new Error('ইমেইল সার্ভিস অনুপলব্ধ। দয়া করে ইন্টারনেট সংযোগ অথবা কনফিগারেশন চেক করুন।');
+  throw new Error('ইমেইল সার্ভিস সংযোগে সমস্যা হয়েছে। দয়া করে আপনার জিমেইল স্প্যাম ফোল্ডার বা ইন্টারনেট চেক করুন।');
 };
