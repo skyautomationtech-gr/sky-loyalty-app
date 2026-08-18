@@ -11,17 +11,41 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Gmail SMTP Transporter
+// Gmail SMTP Sender with multi-port fallback
 const GMAIL_USER = process.env.GMAIL_USER || "skyautomationtech@gmail.com";
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD || "tnlsrakcjbikenmv";
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: GMAIL_USER,
-    pass: GMAIL_APP_PASSWORD.replace(/\s+/g, ""),
-  },
-});
+async function sendMailWithFallback(mailOptions: nodemailer.SendMailOptions) {
+  const user = (process.env.GMAIL_USER || GMAIL_USER).trim();
+  const pass = (process.env.GMAIL_APP_PASSWORD || GMAIL_APP_PASSWORD).replace(/\s+/g, "");
+
+  try {
+    const t1 = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: { user, pass },
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 4000,
+      greetingTimeout: 4000,
+      socketTimeout: 5000,
+    });
+    return await t1.sendMail(mailOptions);
+  } catch (err1: any) {
+    console.warn("[SMTP] Port 465 SSL failed, trying port 587...", err1?.message);
+    const t2 = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      auth: { user, pass },
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 4000,
+      greetingTimeout: 4000,
+      socketTimeout: 5000,
+    });
+    return await t2.sendMail(mailOptions);
+  }
+}
 
 // API endpoint to send OTP email via Gmail SMTP
 app.post("/api/send-otp", async (req, res) => {
@@ -69,7 +93,7 @@ app.post("/api/send-otp", async (req, res) => {
       html: htmlContent,
     };
 
-    const info = await transporter.sendMail(mailOptions);
+    const info = await sendMailWithFallback(mailOptions);
     console.log(`[SMTP] OTP sent to ${email} (Message ID: ${info.messageId})`);
     return res.json({ success: true, messageId: info.messageId });
   } catch (error: any) {

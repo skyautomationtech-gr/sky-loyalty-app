@@ -89,12 +89,14 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
 
     try {
       await sendOtpEmail(user.email, user.name, code);
+      setOtp(['', '', '', '', '', '']);
       setLoginStep('otp');
     } catch (err: any) {
-      console.warn('EmailJS delivery warning:', err);
+      console.warn('Email gateway notice:', err);
       setEmailServiceFailed(true);
+      // Auto fill the OTP so the user can log in with 1 click without getting stuck
+      setOtp(code.split(''));
       setLoginStep('otp');
-      setError(err.message || 'ইমেইলে OTP পাঠানো যায়নি। নিচের কোড দিয়ে ভেরিফাই করুন।');
     } finally {
       setLoading(false);
     }
@@ -598,26 +600,16 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
                 ))}
               </div>
 
+              {emailServiceFailed && (
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-teal-800 text-[11px] font-bold text-center mb-6 bg-teal-50 p-3.5 rounded-2xl border border-teal-200 leading-relaxed">
+                  🔐 ওটিপি কোডটি স্বয়ংক্রিয়ভাবে ইনপুট বক্সে বসানো হয়েছে। সরাসরি নিচের <strong>Confirm OTP</strong> বাটনে চাপুন।
+                </motion.div>
+              )}
+
               {error && (
                 <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-danger-red text-[11px] font-bold text-center mb-6 bg-danger-red/5 p-4 rounded-2xl border border-danger-red/10 leading-relaxed">
                   {error}
                 </motion.div>
-              )}
-
-              {emailServiceFailed && generatedOtp && (
-                <div className="mb-6 p-3 bg-amber-50 rounded-2xl border border-amber-200 text-center">
-                  <p className="text-xs text-amber-800 font-bold mb-2">লগইন টেস্ট OTP কোড: <span className="font-mono text-base font-black text-amber-900 tracking-wider">{generatedOtp}</span></p>
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      setOtp(generatedOtp.split(''));
-                      setError('');
-                    }}
-                    className="text-[11px] font-bold px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow transition"
-                  >
-                    কোডটি বসিয়ে নিন (Auto-fill)
-                  </button>
-                </div>
               )}
 
               <div className="space-y-6">
