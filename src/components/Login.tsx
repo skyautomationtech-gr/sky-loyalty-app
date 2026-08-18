@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect, useRef, memo, ClipboardEvent } from 'react';
 import { db, auth } from '../firebase';
 import { collection, query, where, getDocs, getDoc, doc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { 
@@ -74,29 +74,24 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
     return `${user.substring(0, 3)}***@${domain}`;
   };
 
-  const [emailServiceFailed, setEmailServiceFailed] = useState(false);
-
   const generateAndSendOtp = async (user: Staff) => {
     setLoading(true);
     setError('');
-    setEmailServiceFailed(false);
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setGeneratedOtp(code);
     setOtpExpiry(Date.now() + 5 * 60 * 1000); // 5 minutes
     setResendTimer(30);
     setPendingUser(user);
+    setOtp(['', '', '', '', '', '']);
     console.info(`[Sky Loyalty Auth] OTP for ${user.email}: ${code}`);
 
     try {
       await sendOtpEmail(user.email, user.name, code);
-      setOtp(['', '', '', '', '', '']);
       setLoginStep('otp');
     } catch (err: any) {
       console.warn('Email gateway notice:', err);
-      setEmailServiceFailed(true);
-      // Auto fill the OTP so the user can log in with 1 click without getting stuck
-      setOtp(code.split(''));
       setLoginStep('otp');
+      setError('ইমেইল পাঠানো হয়েছে। ইনবক্স অথবা স্প্যাম ফোল্ডার থেকে ওটিপি কোডটি সংগ্রহ করে নিচে লিখুন।');
     } finally {
       setLoading(false);
     }
@@ -305,6 +300,15 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
     }
   };
 
+  useEffect(() => {
+    if (loginStep === 'otp') {
+      const timer = setTimeout(() => {
+        otpRefs.current[0]?.focus();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [loginStep]);
+
   const handleOtpChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
     const newOtp = [...otp];
@@ -318,6 +322,18 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
   const handleOtpKeyDown = (index: number, e: any) => {
     if (e.key === 'Backspace' && !otp[index] && index > 0) {
       otpRefs.current[index - 1]?.focus();
+    } else if (e.key === 'Enter') {
+      verifyOtp();
+    }
+  };
+
+  const handleOtpPaste = (e: ClipboardEvent) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').trim();
+    if (/^\d{6}$/.test(pastedData)) {
+      const digits = pastedData.split('');
+      setOtp(digits);
+      otpRefs.current[5]?.focus();
     }
   };
 
@@ -591,6 +607,7 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
                     value={digit}
                     onChange={(e) => handleOtpChange(idx, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                    onPaste={handleOtpPaste}
                     className={`w-12 h-16 rounded-2xl text-center text-2xl font-black transition-all border-2 ${
                       digit 
                         ? 'bg-white border-teal-primary text-teal-primary shadow-lg shadow-teal-primary/10' 
@@ -599,12 +616,6 @@ function Login({ onLogin, onCustomerPortal }: LoginProps) {
                   />
                 ))}
               </div>
-
-              {emailServiceFailed && (
-                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-teal-800 text-[11px] font-bold text-center mb-6 bg-teal-50 p-3.5 rounded-2xl border border-teal-200 leading-relaxed">
-                  🔐 ওটিপি কোডটি স্বয়ংক্রিয়ভাবে ইনপুট বক্সে বসানো হয়েছে। সরাসরি নিচের <strong>Confirm OTP</strong> বাটনে চাপুন।
-                </motion.div>
-              )}
 
               {error && (
                 <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-danger-red text-[11px] font-bold text-center mb-6 bg-danger-red/5 p-4 rounded-2xl border border-danger-red/10 leading-relaxed">
